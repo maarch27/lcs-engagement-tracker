@@ -77,8 +77,6 @@ async def is_group_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user = update.effective_user
     if not chat or not user:
         return False
-    if user.id == chat.owner_id if hasattr(chat, "owner_id") else False:
-        return True
     try:
         member = await context.bot.get_chat_member(chat.id, user.id)
         return member.status in ("administrator", "creator")
@@ -92,7 +90,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "When an Instagram post link is shared in this group, I create a task ID. "
         "Members can use /done TASK_ID | a meaningful comment they left after liking and saving. "
         "This is a self-report, not independent Instagram verification.\n\n"
-        "Commands: /help /rules /tasks /done /report"
+        "Commands: /help /rules /tasks /done /report /flags /admin"
     )
 
 
@@ -102,7 +100,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/rules — community engagement rules\n"
         "/tasks — open Instagram tasks in this group\n"
         "/done TASK_ID | your meaningful comment — self-report like + save + comment\n"
-        "/report — admin-only daily report\n\n"
+        "/report — admin-only daily report\n"
+        "/flags — admin-only review of flagged comments\n"
+        "/admin — admin controls and guidance\n\n"
         "ALL or no special instruction means leave a meaningful, relevant comment. "
         "Follow any specific instruction in the original post. Likes and saves are expected for every task. "
         "The bot cannot independently confirm Instagram likes or saves."
@@ -213,6 +213,7 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     normalized = re.sub(r"[^a-z0-9 ]", "", comment.lower()).strip()
     words = normalized.split()
     generic = normalized in GENERIC_COMMENTS or len(words) < 4
+    admin_user = await is_group_admin(update, context)
     conn = connect_db()
     task = conn.execute(
         "SELECT * FROM tasks WHERE id=? AND chat_id=?", (task_id, chat.id)
@@ -225,7 +226,7 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         await msg.reply_text("You can't mark your own post as an engagement task you completed.")
         return
-    if generic and task["instruction"] != "EMOJI_ONLY":
+    if generic and task["instruction"] != "EMOJI_ONLY" and not admin_user:
         conn.execute(
             "INSERT INTO flags(chat_id,user_id,user_name,reason,created_at) VALUES(?,?,?,?,?)",
             (chat.id, user.id, display_name(user), f"Task #{task_id}: comment may be too generic or short: {comment[:180]}", now_iso()),
@@ -245,6 +246,44 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
     await msg.reply_text(
         f"💗 Self-report recorded for task #{task_id}. Remember: this bot cannot independently verify Instagram likes or saves."
+    )
+
+
+async def flags_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_group_admin(update, context):
+        await update.effective_message.reply_text("This command is available to group admins only.")
+        return
+    chat = update.effective_chat
+    conn = connect_db()
+    rows = conn.execute(
+        "SELECT id, user_name, reason, created_at FROM flags "
+        "WHERE chat_id=? ORDER BY id DESC LIMIT 20",
+        (chat.id,),
+    ).fetchall()
+    conn.close()
+    if not rows:
+        await update.effective_message.reply_text("No flagged comments to review 💗")
+        return
+    lines = ["🔎 Recent flags for admin review (newest first):"]
+    lines.extend(
+        f"Flag #{row['id']} · {row['user_name']}\\n{row['reason']}\\n{row['created_at']}"
+        for row in rows
+    )
+    lines.append("\\nFlags are review prompts, not automatic proof of a rule violation. No one is auto-banned.")
+    await update.effective_message.reply_text("\\n\\n".join(lines))
+
+
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_group_admin(update, context):
+        await update.effective_message.reply_text("Admin controls are available to group admins only.")
+        return
+    await update.effective_message.reply_text(
+        "🛠 LCS admin controls\\n"
+        "/report — daily activity report\\n"
+        "/flags — recent flagged comments for manual review\\n\\n"
+        "Admins can post messages and links normally. The bot does not delete admin posts, "
+        "automatically ban members, or independently verify Instagram likes/saves. "
+        "Instagram links posted in the group are recorded as tasks so members can engage with them."
     )
 
 
@@ -292,6 +331,8 @@ async def post_init(application: Application):
         ("tasks", "List your open tasks"),
         ("done", "Report task completion"),
         ("report", "Admin daily report"),
+        ("flags", "Admin review of flagged comments"),
+        ("admin", "Admin controls and guidance"),
     ])
 
 
@@ -308,6 +349,8 @@ def main():
     app.add_handler(CommandHandler("tasks", tasks))
     app.add_handler(CommandHandler("done", done))
     app.add_handler(CommandHandler("report", report))
+    app.add_handler(CommandHandler("flags", flags_command))
+    app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(MessageHandler(filters.TEXT | filters.CAPTION, record_instagram_links))
     log.info("LCS Engagement Tracker starting with long polling.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
