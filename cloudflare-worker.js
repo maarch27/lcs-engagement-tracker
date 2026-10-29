@@ -1,4 +1,5 @@
 const GENERIC = new Set(["nice", "nice post", "love it", "i like this product", "great", "great post", "so cute", "amazing", "beautiful", "love this"]);
+const TRUSTED_ADMIN_USERNAMES = new Set(["marriaammi", "lizal", "itsimplymartha", "drlamarya"]);
 const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 
 export default {
@@ -38,7 +39,11 @@ async function reply(env, chatId, text, replyTo) {
   if (replyTo) payload.reply_to_message_id = replyTo;
   return telegram(env, "sendMessage", payload);
 }
-async function isAdmin(env, chatId, userId) {
+async function isAdmin(env, chatId, userId, username) {
+  // Explicit trusted usernames are accepted even if Telegram's membership lookup fails.
+  const normalized = (username || "").replace(/^@/, "").toLowerCase();
+  if (TRUSTED_ADMIN_USERNAMES.has(normalized)) return true;
+  // Native Telegram group admins and the creator are also trusted.
   try {
     const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getChatMember?chat_id=${chatId}&user_id=${userId}`);
     const j = await r.json();
@@ -69,10 +74,10 @@ async function handleUpdate(update, env) {
       "💗 LCS engagement rules\n1. Like and save each assigned post.\n2. Leave a genuine, relevant comment following the post instructions.\n3. If no special instruction is given, leave a meaningful comment.\n4. Emoji-only comments are acceptable only when explicitly requested.\n5. Avoid generic comments.\n6. Report with /done TASK_ID | your comment.\n\nCompletion is self-reported; likes/saves cannot be independently verified. Admins review flags manually.");
   }
   if (text.startsWith("/admin") || text.startsWith("/report") || text.startsWith("/flags")) {
-    if (!(await isAdmin(env, chatId, user.id))) return reply(env, chatId, "This command is available to group admins only.");
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
     const data = await load(env, chatId);
     if (text.startsWith("/admin")) return reply(env, chatId,
-      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n\nAdmins can post freely. The bot never auto-deletes admin messages or auto-bans members. Flags are review prompts, not proof. Instagram likes/saves are not independently verified.");
+      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n\nTrusted admins (@marriaammi, @Lizal, @itsimplymartha, @drlamarya) and native Telegram group admins can post freely. The bot never auto-deletes admin messages or auto-bans members. Flags are review prompts, not proof. Instagram likes/saves are not independently verified.");
     if (text.startsWith("/flags")) {
       const rows = data.flags.slice(-20).reverse();
       return reply(env, chatId, rows.length ? "🔎 Recent flags (manual review):\n\n" + rows.map(f => `Flag #${f.id} · ${f.name}\n${f.reason}\n${f.at}`).join("\n\n") + "\n\nNo automatic bans are applied." : "No flagged comments to review 💗");
@@ -97,7 +102,7 @@ async function handleUpdate(update, env) {
     const task = data.tasks.find(t => t.id === taskId);
     if (!task) return reply(env, chatId, `I couldn't find task #${taskId} in this chat. Use /tasks.`);
     if (task.posterId === user.id) return reply(env, chatId, "You can't mark your own post as an engagement task you completed.");
-    const admin = await isAdmin(env, chatId, user.id);
+    const admin = await isAdmin(env, chatId, user.id, user.username);
     const normalized = comment.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
     const wordCount = normalized.split(/\s+/).filter(Boolean).length;
     const generic = GENERIC.has(normalized) || wordCount < 4;
