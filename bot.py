@@ -11,6 +11,15 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 DB_PATH = os.environ.get("DATABASE_PATH", "data/lcs_tracker.sqlite3")
+
+# Trusted moderator usernames (case-insensitive). Telegram group admins/creator
+# remain trusted too, even if they are not listed here.
+TRUSTED_ADMIN_USERNAMES = {
+    "marriaammi",
+    "lizal",
+    "itsimplymartha",
+    "drlamarya",
+}
 INSTAGRAM_RE = re.compile(r"https?://(?:www\.)?(?:instagram\.com|instagr\.am)/\S+", re.I)
 GENERIC_COMMENTS = {
     "nice", "nice post", "love it", "i like this product", "great", "great post",
@@ -75,7 +84,13 @@ def display_name(user):
 async def is_group_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     chat = update.effective_chat
     user = update.effective_user
-    if not chat or not user:
+    if not user:
+        return False
+    username = (user.username or "").lstrip("@").casefold()
+    if username in TRUSTED_ADMIN_USERNAMES:
+        return True
+    # Native Telegram group admins and the creator are trusted as an additional check.
+    if not chat:
         return False
     try:
         member = await context.bot.get_chat_member(chat.id, user.id)
@@ -281,7 +296,7 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛠 LCS admin controls\\n"
         "/report — daily activity report\\n"
         "/flags — recent flagged comments for manual review\\n\\n"
-        "Admins can post messages and links normally. The bot does not delete admin posts, "
+        "Trusted admins (@marriaammi, @Lizal, @itsimplymartha, @drlamarya) and native Telegram group admins can post messages and links normally. The bot does not delete admin posts, "
         "automatically ban members, or independently verify Instagram likes/saves. "
         "Instagram links posted in the group are recorded as tasks so members can engage with them."
     )
