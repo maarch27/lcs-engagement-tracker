@@ -3,6 +3,17 @@ const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/setup") {
+      if (!env.SETUP_KEY || url.searchParams.get("key") !== env.SETUP_KEY) return new Response("Not found", { status: 404 });
+      if (!env.TELEGRAM_BOT_TOKEN || !env.WEBHOOK_SECRET || !env.LCS_DATA) return new Response("Missing required Worker secrets or KV binding.", { status: 500 });
+      const webhookUrl = url.origin + "/";
+      const result = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: webhookUrl, secret_token: env.WEBHOOK_SECRET, allowed_updates: ["message", "edited_message"] })
+      });
+      return new Response(await result.text(), { status: result.status, headers: { "content-type": "application/json" } });
+    }
     if (request.method !== "POST") return new Response("LCS Engagement Tracker webhook is ready.");
     const secret = env.WEBHOOK_SECRET;
     if (!secret || request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== secret) {
