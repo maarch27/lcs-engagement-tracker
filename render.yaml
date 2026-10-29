@@ -1,0 +1,14 @@
+services:
+  - type: worker
+    name: lcs-engagement-tracker
+    runtime: docker
+    plan: starter
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DATABASE_PATH
+        value: /data/lcs_tracker.sqlite3
+    disk:
+      name: lcs-tracker-data
+      mountPath: /data
+      sizeGB: 1
