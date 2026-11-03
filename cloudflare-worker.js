@@ -311,7 +311,7 @@ async function handleUpdate(update, env) {
       return reply(env, chatId,
         "💗 Welcome to Star Links, our daily Instagram engagement community!\n\nLike and save every Instagram post assigned to you, and leave a meaningful comment of at least three words. Please complete all assigned tasks.\n\nUse /posts to view your assigned posts. Use /done TASK_ID | your comment to report the comment you left, then use /confirm TASK_ID after you have liked and saved the post.\n\n📸 Saves: Share the Instagram links you engaged with, along with screenshots or screen recordings, in the Saves chat while it is open.\n\n⚠️ The bot records your reports, but it cannot independently verify Instagram likes, saves, or comments.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
     }
-    if (savesChat(env, chatId)) return reply(env, chatId, "📸 SAVES — WEEKLY EVIDENCE CHAT\n\nPost Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\nOpen: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time.\n/evidence and /review are admin review commands.");
+    if (savesChat(env, chatId)) return reply(env, chatId, "📸 STAR SAVES — WEEKLY EVIDENCE CHAT\n\nPost the Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\n🗓️ Open: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time. The bot will remind members during the window and send a weekly report to the admin Warnings chat.\n\nUse #WARNING with a member username or reply to their message to flag an issue for admin review. Use #IMBACK when returning and then catch up on outstanding Posts in the private bot. Tags are recorded for review; they do not automatically issue warnings.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
     const menuText = "💗 Welcome to Star Links, our daily Instagram engagement community!\n\nPlease like and save every Instagram post assigned to you, and leave a genuine, meaningful comment of at least three words. All assigned tasks are required and should be completed within 24 hours.\n\n✨ New and existing members: tap any menu button once to register for task assignments. Use the menu below to view assigned posts, members, admins, and community rules.\n\n📌 Share your own Instagram post in this chat when it is your turn.\n\n✅ Use /posts to view your assigned tasks. After commenting, report it with /done TASK_ID | your comment. Once you have liked and saved the post, use /confirm TASK_ID.\n\n🛡️ Admins can review task reports, flagged comments, and submitted evidence. The bot records your confirmations, but it cannot independently verify Instagram likes or saves; admins may review reports and evidence manually.";
@@ -489,6 +489,36 @@ async function handleUpdate(update, env) {
     await reply(env, chatId, "📝 " + tags.join(", ") + " notice recorded for " + displayUser(user) + ". An admin can review it; no warning or penalty was applied automatically.", msg.message_id);
     if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "📌 STAR SAVES NOTICE\nMember: " + displayUser(user) + " (ID " + user.id + ")\nNotice: " + tags.join(", ") + "\nMessage: " + text.slice(0, 300) + "\nRecorded: " + dateNow());
     return;
+  }
+  // Saves-chat notices are sent to the admin warning desk for review; they do not issue automatic warnings.
+  if (savesChat(env, chatId) && /#(?:WARNING|IMBACK)\b/i.test(text)) {
+    const kind = /#WARNING\b/i.test(text) ? "WARNING" : "IMBACK";
+    const repliedUser = msg.reply_to_message && msg.reply_to_message.from;
+    const usernameMatch = text.match(/@([A-Za-z0-9_]{5,32})/);
+    const target = repliedUser && !repliedUser.is_bot ? repliedUser : (kind === "IMBACK" ? user : null);
+    const targetName = target ? nameOf(target) : (usernameMatch ? "@" + usernameMatch[1] : "Unidentified member");
+    const reason = text.replace(/#(?:WARNING|IMBACK)\b/ig, "").trim().slice(0,500);
+    const notices = await loadGlobal(env, "savesNotices", []);
+    const record = {
+      id: notices.length ? Math.max(...notices.map(n => n.id || 0)) + 1 : 1,
+      kind, userId: target ? target.id : null, username: usernameMatch ? usernameMatch[1] : (target && target.username) || "",
+      name: targetName, reporterId: user.id, reporterName: nameOf(user), reason,
+      chatId, messageId: msg.message_id, month: monthKey(), at: dateNow(), status: "pending_admin_review"
+    };
+    notices.push(record);
+    await saveGlobal(env, "savesNotices", notices);
+    if (env.WARNING_CHAT_ID) {
+      await reply(env, env.WARNING_CHAT_ID,
+        (kind === "WARNING" ? "⚠️ SAVES CHAT WARNING FLAG" : "💗 MEMBER RETURNED — #IMBACK") +
+        "\nMember: " + targetName + (target && target.id ? " (ID " + target.id + ")" : "") +
+        "\nReported by: " + nameOf(user) + "\nDetails: " + (reason || "No additional details") +
+        "\nMonth: " + record.month + "\nNotice ID: #" + record.id +
+        "\nAction: admin review required. Use /warn USER_ID | reason to issue a formal warning; this tag alone does not issue one.");
+    }
+    if (kind === "WARNING") {
+      return reply(env, chatId, "⚠️ The #WARNING notice has been recorded for admin review. It does not automatically issue a formal warning. Please include the member's @username or reply to their message so admins can identify them.", msg.message_id);
+    }
+    return reply(env, chatId, "💗 #IMBACK recorded. Welcome back! Open Posts in the private bot and complete your outstanding assigned links, including meaningful comments, likes, and saves. Admins have been notified.", msg.message_id);
   }
   // Saves chat is an evidence-only room: record Instagram links as evidence, never as engagement tasks.
   if (savesChat(env, chatId) && IG_RE.test(text)) {
