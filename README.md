@@ -2,6 +2,24 @@
 LCS Engagement Tracker helps manage our creator engagement community by tracking daily participation, reminding members to engage, flagging skipped tasks and low-quality comments, monitoring link submissions, and generating daily reports. Built to encourage genuine, meaningful engagement, accountability, and fair community rules.
 
 
+## Commands on the deadline prototype branch
+
+- `/start`, `/help` — start the bot and show help.
+- `/rules` — show engagement rules.
+- `/tasks` — list your open tracked tasks.
+- `/done TASK_ID | comment` — self-report a completed task with the comment left.
+- `/review` — admin queue of overdue tasks awaiting manual review.
+- `/approve TASK_ID USER_ID` — confirm an overdue miss and record the next warning.
+- `/dismiss TASK_ID USER_ID` — dismiss an overdue review without a warning.
+- `/review_done` — admins review recent completion comments.
+- `/edit_done TASK_ID USER_ID | corrected comment` — admins correct a completion comment; the previous comment is retained in edit history.
+- `/warn @username reason` — issue a private warning.
+- `/finalwarn @username reason --to=private|group|log` — issue a final warning privately, in the current group, or in a configured admin log chat.
+- `/report` — admin tracker summary.
+- `/admin` — admin command help.
+
+The `log` destination requires `FINAL_WARNING_CHAT_ID` in the host's environment and the bot must be able to send messages to that chat. Telegram bots cannot send directly to an administrator's personal Saved Messages. Public group warnings may expose sensitive moderation information, so use them only when appropriate. Commands and behaviors should be tested in a separate test group before production.
+
 ## Admin behavior
 
 - Admins can post normal messages and Instagram links without the bot blocking or deleting their posts.
