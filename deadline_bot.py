@@ -104,6 +104,14 @@ def remember_member(conn, chat_id, user):
         "ON CONFLICT(chat_id,user_id) DO UPDATE SET user_name=excluded.user_name,last_seen=excluded.last_seen",
         (chat_id, user.id, display_name(user), iso()),
     )
+    # Add this member to still-open tasks as soon as the bot observes them in the group.
+    # Telegram bots cannot enumerate a group's full member list.
+    conn.execute(
+        "INSERT OR IGNORE INTO task_targets(task_id,chat_id,user_id,user_name) "
+        "SELECT t.id,t.chat_id,?,? FROM tasks t "
+        "WHERE t.chat_id=? AND t.poster_id<>? AND t.due_at>?",
+        (user.id, display_name(user), chat_id, user.id, iso()),
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
