@@ -26,11 +26,15 @@ export default {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: webhookUrl, secret_token: env.WEBHOOK_SECRET, allowed_updates: ["message", "edited_message"] })
       });
+      const meResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`);
+      const meJson = await meResponse.json();
+      if (meJson.ok && meJson.result && meJson.username) await saveGlobal(env, "botUsername", meJson.result.username);
       const menuResult = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setMyCommands`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
           commands: [
             { command: "start", description: "Open your Star Links welcome menu" },
+            { command: "posts", description: "Open posts assigned to you" },
             { command: "tasks", description: "View posts you still need to engage with" },
             { command: "done", description: "Report your comment: /done TASK_ID | comment" },
             { command: "confirm", description: "Confirm you liked and saved a post" },
@@ -215,9 +219,16 @@ async function handleUpdate(update, env) {
       await save(env, chatId, roster);
     }
   }
+  if (chat.type === "private" && /^\/start(?:@\w+)?\s+posts(?:\s|$)/i.test(text)) {
+    if (!env.LINK_CHAT_ID) return reply(env, chatId, "⚠️ The Posts menu is not connected yet. The bot admin needs to configure LINK_CHAT_ID in Cloudflare.");
+    const data = await load(env, env.LINK_CHAT_ID);
+    const ownOpen = data.tasks.filter(t => String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
+    const body = ownOpen.map(t => "#" + t.id + " · Posted by " + t.posterName + "\nStatus: " + (t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE" : "⏳ Awaiting your report") + "\nDeadline: " + (t.deadline ? formatGeorgian(t.deadline) : "Ask an admin") + "\n" + t.url + "\n\nReport your comment: /done " + t.id + " | your comment\nAfter liking and saving: /confirm " + t.id).join("\n\n");
+    return reply(env, chatId, body ? "📋 POSTS YOU NEED TO ENGAGE WITH\n\n" + body : "💗 You have no open posts to engage with right now.");
+  }
   if (text.startsWith("/start") || text.startsWith("/help")) {
     if (chat.type === "private") return reply(env, chatId,
-      "💗 WELCOME TO STAR LINKS!\n\nYour personal engagement dashboard is here. Use these commands in this private bot chat; your task list connects to the main link chat.\n\n📋 YOUR MENU\n/tasks — see posts you still need to engage with\n/done TASK_ID | your comment — report your meaningful comment\n/confirm TASK_ID — confirm you liked and saved the post\n/warnings — check your current-month warning count\n/rules — read the engagement rules\n\n🔗 HOW TO PARTICIPATE\n1. Open the main Star Links link chat.\n2. Post only your Instagram post link. The bot stores a clean URL and shows your Telegram @username when available.\n3. You can post once every 24 hours unless an admin approves an exception.\n4. Engage with other posts within 24 hours: like, save and leave a relevant comment.\n5. Return here and use /tasks, /done and /confirm.\n\n📸 SAVES CHAT\nSubmit screenshots or screen recordings during the Sunday evidence window.\n\n⚠️ The bot checks links and tracker reports, but cannot independently verify Instagram likes, saves or comments. Admins may review evidence manually.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
+      "💗 WELCOME TO STAR LINKS!\n\nYour personal engagement dashboard is here. Use these commands in this private bot chat; your task list connects to the main link chat.\n\n📋 YOUR MENU\n/posts — see posts you still need to engage with\n/tasks — see posts you still need to engage with\n/done TASK_ID | your comment — report your meaningful comment\n/confirm TASK_ID — confirm you liked and saved the post\n/warnings — check your current-month warning count\n/rules — read the engagement rules\n\n🔗 HOW TO PARTICIPATE\n1. Open the main Star Links link chat.\n2. Post only your Instagram post link. The bot stores a clean URL and shows your Telegram @username when available.\n3. You can post once every 24 hours unless an admin approves an exception.\n4. Engage with other posts within 24 hours: like, save and leave a relevant comment.\n5. Return here and use /tasks, /done and /confirm.\n\n📸 SAVES CHAT\nSubmit screenshots or screen recordings during the Sunday evidence window.\n\n⚠️ The bot checks links and tracker reports, but cannot independently verify Instagram likes, saves or comments. Admins may review evidence manually.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
     if (savesChat(env, chatId)) return reply(env, chatId, "📸 SAVES — WEEKLY EVIDENCE CHAT\n\nPost Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\nOpen: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time.\n/evidence and /review are admin review commands.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     return reply(env, chatId,
@@ -331,6 +342,15 @@ async function handleUpdate(update, env) {
     const rows = evidence.slice(-15).reverse();
     return reply(env, chatId, rows.length ? "📸 Recent evidence submissions (manual review)\n\n" + rows.map(e => `Evidence #${e.id} · ${e.name} (ID ${e.userId})\nType: ${e.type} · ${e.at}\n${e.caption || "No caption"}${e.fileId ? "\nTelegram file ID saved" : ""}`).join("\n\n") : "No evidence submissions recorded yet.");
   }
+  if (savesChat(env, chatId) && /#(?:WARNING|IMBACK)\b/i.test(text)) {
+    const tags = [...text.matchAll(/#(?:WARNING|IMBACK)\b/gi)].map(m => m[0].toUpperCase());
+    const notices = await loadGlobal(env, "savesNotices", []);
+    for (const tag of tags) notices.push({ id: notices.length ? Math.max(...notices.map(n => n.id || 0)) + 1 : 1, tag, userId: user.id, name: nameOf(user), chatId, messageId: msg.message_id, text: text.slice(0, 500), at: dateNow() });
+    await saveGlobal(env, "savesNotices", notices);
+    await reply(env, chatId, "📝 " + tags.join(", ") + " notice recorded for " + displayUser(user) + ". An admin can review it; no warning or penalty was applied automatically.", msg.message_id);
+    if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "📌 STAR SAVES NOTICE\nMember: " + displayUser(user) + " (ID " + user.id + ")\nNotice: " + tags.join(", ") + "\nMessage: " + text.slice(0, 300) + "\nRecorded: " + dateNow());
+    return;
+  }
   // Saves chat is an evidence-only room: record Instagram links as evidence, never as engagement tasks.
   if (savesChat(env, chatId) && IG_RE.test(text)) {
     IG_RE.lastIndex = 0;
@@ -341,6 +361,7 @@ async function handleUpdate(update, env) {
       evidence.push({ id: evidence.length ? Math.max(...evidence.map(e => e.id || 0)) + 1 : 1, userId: user.id, name: nameOf(user), chatId, type: "Instagram link", url: link, caption: text.slice(0,300), messageId: msg.message_id, at: dateNow(), status: "pending_review" });
     }
     await saveGlobal(env, "evidence", evidence);
+    await reply(env, chatId, "📸 Saved " + links.length + " Instagram link(s) for admin review. This records the submission; it does not prove likes or saves.", msg.message_id);
     return;
   }
   // Save-chat evidence mode: record incoming images/videos/documents without cluttering the chat with bot replies.
@@ -350,6 +371,7 @@ async function handleUpdate(update, env) {
     const type = msg.photo ? "screenshot/photo" : msg.video ? "screen recording/video" : msg.video_note ? "video note" : msg.animation ? "animation" : "document";
     evidence.push({ id: evidence.length ? Math.max(...evidence.map(e => e.id || 0)) + 1 : 1, userId: user.id, name: nameOf(user), chatId, type, fileId, caption: (msg.caption || "").slice(0,300), messageId: msg.message_id, at: dateNow(), status: "pending_review" });
     await saveGlobal(env, "evidence", evidence);
+    await reply(env, chatId, "📸 Evidence received (" + type + ") and saved for admin review.", msg.message_id);
     return;
   }
   if (text.startsWith("/tracked") || text.startsWith("/remove")) {
@@ -396,7 +418,7 @@ async function handleUpdate(update, env) {
     const flags = data.flags.filter(f => f.at.slice(0,10) === today);
     return reply(env, chatId, `📊 Star Links daily report (UTC)\nTasks posted today: ${taskCount}\nCompletion self-reports today: ${doneCount}\nUnreported task entries: ${openCount}\nFlags today: ${flags.length}\n\nCompletion is self-reported; likes/saves are not independently verified.`);
   }
-  if (text.startsWith("/tasks")) {
+  if (text.startsWith("/tasks") || text.startsWith("/posts")) {
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
     const ownOpen = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-20).reverse();
@@ -471,7 +493,16 @@ async function handleUpdate(update, env) {
   const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed));
   const latestTask = data.tasks.find(t => t.id === Number(ids[0].slice(1)));
   const note = `💗 Your Instagram link is registered!\n\n${canonicalLinks[0]}\nPosted by: ${displayUser(user)}\nTask ID: ${ids.join(", ")}\nYou can post again after 24 hours: ${formatGeorgian(latestTask.deadline)}\n\nUse /tasks in this bot chat to see posts you need to engage with. Then use /done TASK_ID | your comment and /confirm TASK_ID after liking and saving.\n\nThe bot checks the clean link and reports in this tracker. It cannot independently verify Instagram likes/saves or comments on Instagram.`;
-  await reply(env, chatId, `🔗 ${displayUser(user)}\n${canonicalLinks.join("\n")}`, msg.message_id);
+  const botUsername = await loadGlobal(env, "botUsername", "");
+  const linkText = "🔗 " + displayUser(user) + "\n" + canonicalLinks.join("\n");
+  if (botUsername) {
+    await telegram(env, "sendMessage", {
+      chat_id: chatId, text: linkText, reply_to_message_id: msg.message_id, disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [[{ text: "📋 Open my posts in the bot", url: "https://t.me/" + botUsername + "?start=posts" }]] }
+    });
+  } else {
+    await reply(env, chatId, linkText, msg.message_id);
+  }
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
   if (!dm.ok) {
     console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
