@@ -473,5 +473,8 @@ async function handleUpdate(update, env) {
   const note = `💗 Your Instagram link is registered!\n\n${canonicalLinks[0]}\nPosted by: ${displayUser(user)}\nTask ID: ${ids.join(", ")}\nYou can post again after 24 hours: ${formatGeorgian(latestTask.deadline)}\n\nUse /tasks in this bot chat to see posts you need to engage with. Then use /done TASK_ID | your comment and /confirm TASK_ID after liking and saving.\n\nThe bot checks the clean link and reports in this tracker. It cannot independently verify Instagram likes/saves or comments on Instagram.`;
   await reply(env, chatId, `🔗 ${displayUser(user)}\n${canonicalLinks.join("\n")}`, msg.message_id);
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
-  if (!dm.ok) console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
+  if (!dm.ok) {
+    console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
+    await reply(env, chatId, `💗 ${displayUser(user)}, open the Star Links bot and press /start to receive your private task menu.`, msg.message_id);
+  }
 }
