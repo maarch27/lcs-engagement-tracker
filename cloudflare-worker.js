@@ -566,7 +566,7 @@ async function handlePersistentMenu(env, chat, action) {
     text = CHAT_RULES;
   } else if (action === "admins") {
     text = "👑 <b>Admins — follow or message</b>\n" + IG_ADMINS.map(([name, url, telegramUsername]) =>
-      "• <a href=\"" + url + "\">@"+ htmlEscape(name) + "</a> · <a href=\\"https://t.me/" + telegramUsername + "\">Message on Telegram</a>"
+      "• <a href=\"" + url + "\">@" + htmlEscape(name) + "</a> · <a href=\"https://t.me/" + telegramUsername + "\">Message on Telegram</a>"
     ).join("\n") + "\n\nUse the Instagram link to follow an admin, or the Telegram link to contact them.";
   } else if (action === "members") {
     const page = 0;
