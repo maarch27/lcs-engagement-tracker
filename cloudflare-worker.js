@@ -335,7 +335,7 @@ async function rules(env, chatId) {
     "2. Like and save the Instagram post and leave a relevant comment.\n" +
     "3. Unless the post says otherwise, comments should contain at least 3 meaningful words.\n" +
     "4. Follow specific instructions, including exact emoji requests.\n" +
-    "5. Report with /done TASK_ID | the comment you left. This is a self-report, not proof of likes/saves.\n" +
+    "5. Report with /done TASK_ID | the comment you left.\n" +
     "6. Overdue tasks are queued for admin review; warnings are not automatic.");
 }
 
@@ -346,7 +346,7 @@ async function listTasks(env, msg) {
   if (!rows.length) return reply(env, msg.replyChatId || msg.chat.id, "You have no open tracked tasks assigned to you 💗");
   const lines = ["📋 Your open tasks (deadlines in UTC):"];
   for (const task of rows) lines.push("Task #" + task.id + " · " + task.instruction + " · posted by " + task.posterName + "\nDue: " + task.dueAt + "\n" + task.url);
-  return reply(env, msg.replyChatId || msg.chat.id, lines.join("\n\n"));
+  return adminPrivateReply(env, msg, lines.join("\n\n"));
 }
 
 async function done(env, msg) {
@@ -387,11 +387,12 @@ async function adminPrivateReply(env, msg, text) {
 
 async function adminCommand(env, msg) {
   if (!(await requireAdmin(env, msg))) return;
-  return reply(env, msg.replyChatId || msg.chat.id,
+  return adminPrivateReply(env, msg,
     "🛠 Admin commands\n/review — pending overdue-task reviews\n" +
     "/approve TASK_ID USER_ID — confirm miss and issue next warning\n" +
     "/dismiss TASK_ID USER_ID — dismiss review\n/warn @username reason\n/finalwarn @username reason\n" +
-    "/report — tracker summary\n\nNo member is automatically removed, and posts are never auto-deleted.");
+    "/report — private tracker summary\n\nNo member is automatically removed, and posts are never auto-deleted.\n\nVerification status: " +
+    "/done records the submitted comment and screens its text for length and generic wording; it does not confirm the comment appears on Instagram. Meta comment access is not connected. Member-by-member likes and saves cannot be verified through this API. Likes are available only as aggregate counts for eligible media with owner authorization; saves need manual evidence review.");
 }
 
 async function report(env, msg) {
@@ -401,10 +402,10 @@ async function report(env, msg) {
   const open = data.tasks.reduce((count, task) => count + task.targets.filter(target => !hasCompletion(data, task.id, target.userId)).length, 0);
   const today = new Date().toISOString().slice(0, 10);
   const warningsToday = data.warnings.filter(item => item.issuedAt.startsWith(today)).length;
-  return reply(env, msg.replyChatId || msg.chat.id,
+  return adminPrivateReply(env, msg,
     "📊 LCS tracker report\nTasks recorded: " + data.tasks.length + "\nOpen task assignments: " + open +
     "\nPending overdue reviews: " + pending + "\nWarnings issued today (UTC): " + warningsToday +
-    "\n\nInstagram likes and saves are not independently verified. Overdue tasks require admin review before warnings are issued.");
+    "\n\nInstagram check status: /done screens submitted comment text, but does not confirm comments appear on Instagram. Meta comment access is not connected. The API does not identify which member liked or saved a post. It can provide aggregate like counts only for eligible media with owner authorization; saves need manual evidence review. Overdue tasks need admin review before warnings.");
 }
 
 async function review(env, msg) {
@@ -414,7 +415,7 @@ async function review(env, msg) {
   if (!rows.length) return adminPrivateReply(env, msg, "No overdue tasks are waiting for review 💗");
   const lines = ["🔎 Pending overdue-task reviews (not confirmed violations):"];
   for (const item of rows) lines.push("Task #" + item.taskId + " · " + item.userName + " (user ID " + item.userId + ")\n" + item.reason + "\nApprove: /approve " + item.taskId + " " + item.userId + "\nDismiss: /dismiss " + item.taskId + " " + item.userId);
-  return reply(env, msg.replyChatId || msg.chat.id, lines.join("\n\n"));
+  return adminPrivateReply(env, msg, lines.join("\n\n"));
 }
 
 async function reviewDecision(env, msg, command) {
@@ -549,13 +550,13 @@ function menuWelcomeText(chatId) {
   if (String(chatId) === SAVES_CHAT_ID) {
     return "💗 Welcome to Star Saves!\nPost Sunday save links and #WARNING notices here. Daily engagement happens in Star Links. Use the menu below for help.";
   }
-  return "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
+  return "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below to explore tracked posts, members, admins, chats, saves, and rules.";
 }
 
 async function sendMenu(env, chatId, isGroup = false) {
   return telegram(env, "sendMessage", {
     chat_id: chatId,
-    text: isGroup ? menuWelcomeText(chatId) : "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
+    text: isGroup ? menuWelcomeText(chatId) : "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below to explore tracked posts, members, admins, chats, saves, and rules.",
     reply_markup: isGroup ? persistentMenuKeyboard() : menuKeyboard(),
     disable_web_page_preview: true,
   });
@@ -603,7 +604,7 @@ async function handlePersistentMenu(env, chat, action) {
   } else if (action === "chats") {
     text = "💬 <b>Tracker menu</b>\nThis group is connected. Use Posts to see tracked links, Members to open Instagram profiles, and Admins to contact an admin.";
   } else if (action === "saves") {
-    text = "💾 <b>Saves Chat</b>\nPost Sunday save links and #WARNING notices in the Saves chat. Likes and saves cannot be checked directly by the bot.";
+    text = "💾 <b>Saves Chat</b>\nPost Sunday save links and #WARNING notices in the Saves chat.";
     replyMarkup = {
       inline_keyboard: [
         ...(env.SAVES_CHAT_INVITE_URL ? [[{ text: "💾 Open Saves Chat", url: env.SAVES_CHAT_INVITE_URL }]] : []),
@@ -696,7 +697,7 @@ async function handleMenuCallback(query, env) {
       ? "💬 <b>Connected Telegram chats</b>\n" + chats.length + " chat(s) have tracker data. Use /tasks or /done in the chat where you posted the link.\n\nPrivate invite links are not stored by the bot."
       : "💬 No Telegram engagement chat has connected to the tracker yet.";
   } else if (data === "menu:saves") {
-    body = "💾 <b>Saves Chat</b>\nPost your Sunday save links and #WARNING notices here. The bot cannot access your private Instagram Saved folder or verify screenshots automatically.";
+    body = "💾 <b>Saves Chat</b>\nPost your Sunday save links and #WARNING notices here.";
     keyboard = {
       inline_keyboard: [
         ...(env.SAVES_CHAT_INVITE_URL ? [[{ text: "💾 Open Saves Chat", url: env.SAVES_CHAT_INVITE_URL }]] : []),
@@ -704,7 +705,7 @@ async function handleMenuCallback(query, env) {
       ],
     };
   } else if (data === "menu:home") {
-    body = "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
+    body = "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below to explore tracked posts, members, admins, chats, saves, and rules.";
   }
   const call = await telegram(env, "editMessageText", {
     chat_id: chatId, message_id: query.message.message_id, text: body,
