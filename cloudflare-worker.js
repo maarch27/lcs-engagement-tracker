@@ -2,8 +2,8 @@ const TRUSTED_ADMIN_USERNAMES = new Set(["marriaammi", "lizal", "itsimplymartha"
 const GENERIC_COMMENTS = new Set(["nice", "nice post", "love it", "i like this product", "great", "great post", "so cute", "amazing", "beautiful", "love this"]);
 const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 const DB_PREFIX = "chat:";
-const SAVES_CHAT_ID = "-3760298679";
-const LINKS_CHAT_ID = "-3167895818";
+const SAVES_CHAT_ID = "-1003760298679";
+const LINKS_CHAT_ID = "-1003167895818";
 
 const IG_ADMINS = [
   ["maarch_27", "https://www.instagram.com/maarch_27/", "marriaammi"],
@@ -524,20 +524,20 @@ function persistentMenuKeyboard() {
 
 function welcomeMemberText(chatId, name) {
   if (String(chatId) === LINKS_CHAT_ID) {
-    return "💗 Welcome " + name + " to Star Links!\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Please complete every assigned task; engagement is required and cannot be skipped.";
+    return "💗 Welcome " + name + " to Star Links — our daily engagement chat!\nLike + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task; engagement is required and cannot be skipped. Existing members, tap any menu button once to register for task assignments.";
   }
   if (String(chatId) === SAVES_CHAT_ID) {
-    return "💗 Welcome " + name + " to Star Saves!\nThis chat is for Sunday save links and #WARNING notices. Daily link engagement happens in Star Links.";
+    return "💗 Welcome " + name + " to Star Saves!\nThis chat is for Sunday save links and #WARNING notices. Daily engagement happens in Star Links.";
   }
   return "💗 Welcome " + name + " to our engagement chat! Use the menu below to get started.";
 }
 
 function menuWelcomeText(chatId) {
   if (String(chatId) === LINKS_CHAT_ID) {
-    return "💗 Welcome to Star Links!\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task; engagement is required and cannot be skipped. Use the menu below to view posts, members, admins, and rules.";
+    return "💗 Welcome to Star Links — our daily engagement chat!\nLike + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task; engagement is required and cannot be skipped. Existing members, tap any menu button once to register for task assignments. Use the menu below to view posts, members, admins, and rules.";
   }
   if (String(chatId) === SAVES_CHAT_ID) {
-    return "💗 Welcome to Star Saves!\nPost Sunday save links and #WARNING notices here. Daily link engagement happens in Star Links. Use the menu below for help.";
+    return "💗 Welcome to Star Saves!\nPost Sunday save links and #WARNING notices here. Daily engagement happens in Star Links. Use the menu below for help.";
   }
   return "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
 }
