@@ -238,8 +238,15 @@ async function handleUpdate(update, env) {
     return reply(env, chatId, members.length ? "👥 MEMBERS SEEN BY THE BOT\n\n" + members.map(p => p.username ? "@" + p.username.replace(/^@/, "") : p.name).join("\n") + "\n\nNote: this list includes members the bot has observed, not necessarily every group member." : "👥 No members have been recorded yet. Members appear here after they send a message in Star Links.");
   }
   if (text.startsWith("/start") || text.startsWith("/help") || text.startsWith("/menu")) {
-    if (chat.type === "private") return reply(env, chatId,
-      "💗 Welcome to Star Links, our daily engagement chat!\n\nLike and save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task. Engagement is required.\n\nExisting members, tap any menu button once to register for task assignments. Use the menu to view posts, members, admins and rules.\n\nUse /posts to view your assigned posts, /done TASK_ID | your comment to report your comment, and /confirm TASK_ID after liking and saving.\n\n📸 Saves: submit Instagram links and screenshots or screen recordings in the Saves chat during its open window.\n\n⚠️ The bot records reports but cannot independently verify Instagram likes, saves or comments.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
+    if (chat.type === "private") {
+      const normalizedUsername = (user.username || "").replace(/^@/, "").toLowerCase();
+      if (TRUSTED_ADMIN_USERNAMES.has(normalizedUsername)) {
+        return reply(env, chatId,
+          "🛠 STAR LINKS ADMIN PANEL\n\nWelcome, admin. Use these commands to manage the community.\n\n/admin to reopen this admin menu\n/report for today's task summary\n/tracked to receive the latest tracked posts privately\n/check TASK_ID to check task reports\n/warnings to review monthly warnings\n/warn USER_ID | reason to issue a warning\n/approvepost USER_ID to approve an early post\n/evidence to review Saves submissions\n/flags to review flagged comments\n\nThe bot records self-reports and cannot independently verify Instagram likes or saves. No automatic bans or message deletions are applied.");
+      }
+      return reply(env, chatId,
+        "💗 Welcome to Star Links, our daily Instagram engagement community!\n\nLike and save every Instagram post assigned to you, and leave a meaningful comment of at least three words. Please complete all assigned tasks.\n\nUse /posts to view your assigned posts. Use /done TASK_ID | your comment to report the comment you left, then use /confirm TASK_ID after you have liked and saved the post.\n\n📸 Saves: Share the Instagram links you engaged with, along with screenshots or screen recordings, in the Saves chat while it is open.\n\n⚠️ The bot records your reports, but it cannot independently verify Instagram likes, saves, or comments.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
+    }
     if (savesChat(env, chatId)) return reply(env, chatId, "📸 SAVES — WEEKLY EVIDENCE CHAT\n\nPost Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\nOpen: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time.\n/evidence and /review are admin review commands.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
@@ -426,7 +433,8 @@ async function handleUpdate(update, env) {
   }
   if (text.startsWith("/admin") || text.startsWith("/report") || text.startsWith("/flags")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
-    const data = await load(env, chatId);
+    const adminDataChatId = chat.type === "private" && env.LINK_CHAT_ID ? env.LINK_CHAT_ID : chatId;
+    const data = await load(env, adminDataChatId);
     if (text.startsWith("/admin")) return reply(env, chatId,
       "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n/tracked — privately view tracked posts\n/warnings — monthly warning summary\n/warn USER_ID | reason — issue a warning (or reply to a member's message with /warn reason)\n/approvepost USER_ID — approve one early post\n/evidence — list recent screenshot/screen-recording submissions\n/check TASK_ID — check who has not reported each action\n\nAt 5 warnings in a calendar month, a posting limit is applied until next month and the member/admins are notified. No auto-ban or auto-delete. Instagram likes/saves are not independently verified.");
     if (text.startsWith("/flags")) {
