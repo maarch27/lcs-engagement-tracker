@@ -51,7 +51,7 @@ async function isAdmin(env, chatId, userId, username) {
   } catch { return false; }
 }
 async function load(env, chatId) {
-  return await env.LCS_DATA.get(`chat:${chatId}`, "json") || { tasks: [], completions: [], flags: [], nextId: 1 };
+  return await env.LCS_DATA.get(`chat:${chatId}`, "json") || { tasks: [], completions: [], flags: [], participants: [], nextId: 1 };
 }
 async function save(env, chatId, data) {
   await env.LCS_DATA.put(`chat:${chatId}`, JSON.stringify(data));
@@ -107,15 +107,68 @@ async function handleUpdate(update, env) {
   const chat = msg.chat, user = msg.from;
   const chatId = chat.id;
   const text = msg.text || msg.caption || "";
+  if (["group", "supergroup"].includes(chat.type) && user && !user.is_bot) {
+    const roster = await load(env, chatId);
+    roster.participants = roster.participants || [];
+    if (!roster.participants.some(p => String(p.userId) === String(user.id))) {
+      roster.participants.push({ userId: user.id, name: nameOf(user), username: user.username || "", seenAt: dateNow() });
+      await save(env, chatId, roster);
+    } else if (!roster.participants.some(p => String(p.userId) === String(user.id) && p.name === nameOf(user))) {
+      roster.participants = roster.participants.map(p => String(p.userId) === String(user.id) ? { ...p, name: nameOf(user), username: user.username || "", seenAt: dateNow() } : p);
+      await save(env, chatId, roster);
+    }
+  }
   if (text.startsWith("/start") || text.startsWith("/help")) {
     return reply(env, chatId,
-      "💗 Welcome to Star Links — Daily Engagement!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view engagement tasks\n/rules — community rules\n/done TASK_ID | your comment — report your comment\n/warnings — view your current-month warning count\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n/tracked — privately view tracked posts (admins)\n/warnings — view warning summary (admins)\n/warn USER_ID | reason — issue a warning (admins)\n/approvepost USER_ID — approve one early post (admins)\n/evidence — list recent submitted evidence (admins)\n\n📸 SAVES CHAT\nSend screenshots or screen recordings as evidence. Admins can use /warnings, /warn, /evidence and /review.\n\n💌 NEED HELP?\nContact @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nThe bot never deletes messages or auto-bans members. Instagram likes/saves cannot be verified directly by the bot. 💗");
+      "💗 Welcome to Star Links — Daily Engagement!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view engagement tasks\n/rules — community rules\n/done TASK_ID | your comment — report your comment\n/confirm TASK_ID — confirm you liked and saved the post\n/warnings — view your current-month warning count\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n/tracked — privately view tracked posts (admins)\n/warnings — view warning summary (admins)\n/warn USER_ID | reason — issue a warning (admins)\n/approvepost USER_ID — approve one early post (admins)\n/evidence — list recent submitted evidence (admins)\n/check TASK_ID — list known members missing reports (admins)\n\n📸 SAVES CHAT\nSend screenshots or screen recordings as evidence. Admins can use /warnings, /warn, /evidence and /review.\n\n💌 NEED HELP?\nContact @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nThe bot never deletes messages or auto-bans members. Instagram likes/saves cannot be verified directly by the bot. 💗");
   }
   if (text.startsWith("/rules")) {
     return reply(env, chatId,
-      "💗 Star Links engagement rules\n1. Like and save each assigned post.\n2. Leave a genuine, relevant comment following the post instructions.\n3. If no special instruction is given, leave a meaningful comment.\n4. Emoji-only comments are acceptable only when explicitly requested.\n5. Avoid generic comments.\n6. Report with /done TASK_ID | your comment.\n7. Each member may submit a new Instagram post once every 24 hours. An admin can approve an earlier post with /approvepost USER_ID.\n8. Evidence goes in the designated saves chat: screenshots or screen recordings.\n\nWarnings are counted by calendar month. At 5 warnings, the bot applies a posting limit until the next month and alerts admins. It does not ban members or delete messages. Completion and evidence require human review; likes/saves cannot be independently verified by the bot.");
+      "💗 Star Links engagement rules\n1. Like and save each assigned post.\n2. Leave a genuine, relevant comment following the post instructions.\n3. If no special instruction is given, leave a meaningful comment.\n4. Emoji-only comments are acceptable only when explicitly requested.\n5. Avoid generic comments.\n6. Report with /done TASK_ID | your comment, then /confirm TASK_ID after liking and saving.\n7. Each member may submit a new Instagram post once every 24 hours. An admin can approve an earlier post with /approvepost USER_ID.\n8. Evidence goes in the designated saves chat: screenshots or screen recordings.\n\nWarnings are counted by calendar month. At 5 warnings, the bot applies a posting limit until the next month and alerts admins. It does not ban members or delete messages. Completion and evidence require human review; likes/saves cannot be independently verified by the bot.");
   }
   // Warning/evidence commands are backed by shared KV records so the saves chat and main group can share moderation history.
+  if (text.startsWith("/confirm")) {
+    const match = text.match(/^\/confirm(?:@\w+)?\s+(\d+)$/);
+    if (!match) return reply(env, chatId, "Format: /confirm TASK_ID — use this after you have liked and saved the post.");
+    const taskId = Number(match[1]);
+    const data = await load(env, chatId);
+    const task = data.tasks.find(t => t.id === taskId);
+    if (!task) return reply(env, chatId, `I couldn't find task #${taskId} in this chat.`);
+    if (String(task.posterId) === String(user.id)) return reply(env, chatId, "You don't need to engage with your own post.");
+    const existing = data.completions.find(c => c.taskId === taskId && String(c.userId) === String(user.id));
+    if (existing) {
+      existing.likesConfirmed = true;
+      existing.saveConfirmed = true;
+      existing.confirmedAt = dateNow();
+      existing.name = nameOf(user);
+    } else {
+      data.completions.push({ taskId, userId: user.id, name: nameOf(user), comment: "", likesConfirmed: true, saveConfirmed: true, at: dateNow(), confirmedAt: dateNow() });
+    }
+    await save(env, chatId, data);
+    return reply(env, chatId, `💗 Like/save confirmation recorded for task #${taskId}. This is a self-report; the bot cannot verify Instagram actions directly.`);
+  }
+  if (text.startsWith("/check")) {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can check a task.");
+    const match = text.match(/^\/check(?:@\w+)?\s+(\d+)$/);
+    if (!match) return reply(env, chatId, "Format: /check TASK_ID");
+    const taskId = Number(match[1]);
+    const data = await load(env, chatId);
+    const task = data.tasks.find(t => t.id === taskId);
+    if (!task) return reply(env, chatId, `I couldn't find task #${taskId} in this chat.`);
+    const people = (data.participants || []).filter(p => String(p.userId) !== String(task.posterId));
+    const status = people.map(p => {
+      const record = data.completions.find(x => x.taskId === taskId && String(x.userId) === String(p.userId));
+      const missing = [];
+      if (!record || !record.comment || !record.comment.trim()) missing.push("comment");
+      if (!record || !record.likesConfirmed) missing.push("like report");
+      if (!record || !record.saveConfirmed) missing.push("save report");
+      return { name: p.name, userId: p.userId, missing };
+    });
+    const incomplete = status.filter(x => x.missing.length);
+    const complete = status.length - incomplete.length;
+    const body = incomplete.length ? incomplete.map(x => `• ${x.name} (ID ${x.userId}): missing ${x.missing.join(", ")}`).join("\n") : "No known active participants are missing reports.";
+    return reply(env, chatId, `🔎 Task #${taskId} report status\nPost: ${task.url}\nKnown participants checked: ${status.length}\nAll three reports present: ${complete}\nStill missing reports: ${incomplete.length}\n\n${body}\n\nImportant: this only covers members the bot has seen message in this chat. Like/save statuses are self-reported, not independently verified by Instagram.`);
+  }
   if (text.startsWith("/warnings")) {
     const warnings = await loadGlobal(env, "warnings", []);
     const memberRows = monthlyWarnings(warnings, user.id);
@@ -202,7 +255,7 @@ async function handleUpdate(update, env) {
     const rows = data.tasks.slice(-30).reverse();
     const report = rows.length
       ? "📌 Tracked posts · latest 30\n\n" + rows.map(t => {
-          const done = data.completions.filter(x => x.taskId === t.id);
+          const done = data.completions.filter(x => x.taskId === t.id && x.comment && x.comment.trim() && x.likesConfirmed && x.saveConfirmed);
           const overdue = t.deadline && Date.now() > new Date(t.deadline).getTime();
           return `Task #${t.id} · ${t.posterName} · ${t.instruction}\nStatus: ${done.length ? "Completion reported (self-reported)" : overdue ? "⚠️ OVERDUE — no report" : "⏳ Awaiting engagement"}\nDue: ${t.deadline ? formatGeorgian(t.deadline) : "Not set"}\nReports: ${done.length}\n${t.url}`;
         }).join("\n\n") + "\n\nAdmin control: use /remove TASK_ID in the group to stop tracking a post."
@@ -215,7 +268,7 @@ async function handleUpdate(update, env) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
     const data = await load(env, chatId);
     if (text.startsWith("/admin")) return reply(env, chatId,
-      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n/tracked — privately view tracked posts\n/warnings — monthly warning summary\n/warn USER_ID | reason — issue a warning (or reply to a member's message with /warn reason)\n/approvepost USER_ID — approve one early post\n/evidence — list recent screenshot/screen-recording submissions\n\nAt 5 warnings in a calendar month, a posting limit is applied until next month and the member/admins are notified. No auto-ban or auto-delete. Instagram likes/saves are not independently verified.");
+      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n/tracked — privately view tracked posts\n/warnings — monthly warning summary\n/warn USER_ID | reason — issue a warning (or reply to a member's message with /warn reason)\n/approvepost USER_ID — approve one early post\n/evidence — list recent screenshot/screen-recording submissions\n/check TASK_ID — check who has not reported each action\n\nAt 5 warnings in a calendar month, a posting limit is applied until next month and the member/admins are notified. No auto-ban or auto-delete. Instagram likes/saves are not independently verified.");
     if (text.startsWith("/flags")) {
       const rows = data.flags.slice(-20).reverse();
       return reply(env, chatId, rows.length ? "🔎 Recent flags (manual review):\n\n" + rows.map(f => `Flag #${f.id} · ${f.name}\n${f.reason}\n${f.at}`).join("\n\n") + "\n\nNo automatic bans are applied." : "No flagged comments to review 💗");
@@ -223,13 +276,13 @@ async function handleUpdate(update, env) {
     const today = new Date().toISOString().slice(0, 10);
     const taskCount = data.tasks.filter(t => t.at.slice(0,10) === today).length;
     const doneCount = data.completions.filter(c => c.at.slice(0,10) === today).length;
-    const openCount = data.tasks.filter(t => !data.completions.some(c => c.taskId === t.id)).length;
+    const openCount = data.tasks.filter(t => !data.completions.some(c => c.taskId === t.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).length;
     const flags = data.flags.filter(f => f.at.slice(0,10) === today);
     return reply(env, chatId, `📊 Star Links daily report (UTC)\nTasks posted today: ${taskCount}\nCompletion self-reports today: ${doneCount}\nUnreported task entries: ${openCount}\nFlags today: ${flags.length}\n\nCompletion is self-reported; likes/saves are not independently verified.`);
   }
   if (text.startsWith("/tasks")) {
     const data = await load(env, chatId);
-    const ownOpen = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id)).slice(-20).reverse();
+    const ownOpen = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-20).reverse();
     return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks (including overdue posts — please catch up on all of them):\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n${t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE — please complete this task" : "⏳ Deadline"}: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗")
   }
   if (text.startsWith("/done")) {
@@ -250,10 +303,11 @@ async function handleUpdate(update, env) {
       return reply(env, chatId, `⚠️ Your completion for task #${taskId} was flagged for admin review because the comment may be too short or generic. Please submit a specific, relevant comment. Likes and saves are still required.`);
     }
     // Record the comment report, but explicitly ask members to confirm likes and saves too.
-    data.completions = data.completions.filter(c => !(c.taskId === taskId && c.userId === user.id));
-    data.completions.push({ taskId, userId: user.id, name: nameOf(user), comment: comment.slice(0,500), likesConfirmed: false, saveConfirmed: false, at: dateNow() });
+    const previous = data.completions.find(c => c.taskId === taskId && String(c.userId) === String(user.id));
+    data.completions = data.completions.filter(c => !(c.taskId === taskId && String(c.userId) === String(user.id)));
+    data.completions.push({ taskId, userId: user.id, name: nameOf(user), comment: comment.slice(0,500), likesConfirmed: !!(previous && previous.likesConfirmed), saveConfirmed: !!(previous && previous.saveConfirmed), at: dateNow(), confirmedAt: previous && previous.confirmedAt });
     await save(env, chatId, data);
-    return reply(env, chatId, `💗 Comment report recorded for task #${taskId}.\n\n⚠️ Before this task is fully self-reported, please make sure you have also liked and saved the Instagram post.\n\nThe bot cannot verify Instagram likes or saves directly, so this record is not proof that those actions were completed.`);
+    return reply(env, chatId, `💗 Comment report recorded for task #${taskId}.\n\n⚠️ After liking and saving, send /confirm ${taskId} to record those actions too.\n\nThe bot cannot verify Instagram likes or saves directly, so these records are self-reports, not proof.`);
   }
   if (!["group", "supergroup"].includes(chat.type)) return;
   const links = text.match(IG_RE);
@@ -293,7 +347,7 @@ async function handleUpdate(update, env) {
     ids.push("#" + id);
   }
   await save(env, chatId, data);
-  const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id));
+  const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed));
   const latestTask = data.tasks.find(t => t.id === Number(ids[0].slice(1)));
   const note = `💗 Thank you ${nameOf(user)} for sharing your Instagram post!\n\n✅ Your post has been added to the Star Links Engagement Tracker.\n📌 Task ID: ${ids.join(", ")}\n⏳ Daily engagement deadline: ${formatGeorgian(latestTask.deadline)}\n\n💗 Please make sure to engage with the other posts in this cycle: like + save and leave the requested, meaningful comment (3+ words unless the post says otherwise).\n\nUse /tasks to review outstanding tasks. Report completion in the group with /done TASK_ID | your comment.\n\nℹ️ The bot records self-reports; it cannot independently verify Instagram likes or saves.`;
   // Send this confirmation privately to the person who shared the link. Never post the notification in the group.
