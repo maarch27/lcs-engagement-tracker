@@ -33,3 +33,10 @@ The `cloudflare-worker.js` file is the webhook-based version intended for Cloudf
 - Completion is self-reported; the bot cannot confirm Instagram likes/saves through Telegram.
 - The Worker code is prepared but has not yet been deployed or tested against your live Telegram bot.
 - Cloudflare free-plan limits and account requirements can change; check your dashboard before deployment.
+
+
+## Deadline-based prototype branch
+
+A separate prototype is being prepared on the `nightly-deadline-review` branch. It adds `deadline_bot.py`, a 24-hour per-link deadline, and a nightly pending-review queue using Georgia time. See `DEADLINE_BOT_SETUP.md` for configuration, limitations, and safe rollout steps.
+
+This prototype is not live just because it is in GitHub. Do not run it with the same token as the current bot until the existing deployment has been identified and safely stopped. It requires a Python host with persistent storage and the `TELEGRAM_BOT_TOKEN` secret configured outside GitHub.
