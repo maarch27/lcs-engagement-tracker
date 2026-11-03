@@ -34,6 +34,7 @@ export default {
         body: JSON.stringify({
           commands: [
             { command: "start", description: "Open your Star Links welcome menu" },
+            { command: "menu", description: "Show the Star Links menu again" },
             { command: "posts", description: "Open posts assigned to you" },
             { command: "tasks", description: "View posts you still need to engage with" },
             { command: "done", description: "Report your comment: /done TASK_ID | comment" },
@@ -236,19 +237,20 @@ async function handleUpdate(update, env) {
     const members = (data.participants || []).slice(-100).reverse();
     return reply(env, chatId, members.length ? "👥 MEMBERS SEEN BY THE BOT\n\n" + members.map(p => p.username ? "@" + p.username.replace(/^@/, "") : p.name).join("\n") + "\n\nNote: this list includes members the bot has observed, not necessarily every group member." : "👥 No members have been recorded yet. Members appear here after they send a message in Star Links.");
   }
-  if (text.startsWith("/start") || text.startsWith("/help")) {
+  if (text.startsWith("/start") || text.startsWith("/help") || text.startsWith("/menu")) {
     if (chat.type === "private") return reply(env, chatId,
-      "💗 WELCOME TO STAR LINKS!\n\nYour personal engagement dashboard is here. Use these commands in this private bot chat; your task list connects to the main link chat.\n\n📋 YOUR MENU\n/posts — see posts you still need to engage with\n/tasks — see posts you still need to engage with\n/done TASK_ID | your comment — report your meaningful comment\n/confirm TASK_ID — confirm you liked and saved the post\n/warnings — check your current-month warning count\n/rules — read the engagement rules\n\n🔗 HOW TO PARTICIPATE\n1. Open the main Star Links link chat.\n2. Post only your Instagram post link. The bot stores a clean URL and shows your Telegram @username when available.\n3. You can post once every 24 hours unless an admin approves an exception.\n4. Engage with other posts within 24 hours: like, save and leave a relevant comment.\n5. Return here and use /tasks, /done and /confirm.\n\n📸 SAVES CHAT\nSubmit screenshots or screen recordings during the Sunday evidence window.\n\n⚠️ The bot checks links and tracker reports, but cannot independently verify Instagram likes, saves or comments. Admins may review evidence manually.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
+      "💗 Welcome to Star Links, our daily engagement chat!\n\nLike and save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task. Engagement is required.\n\nExisting members, tap any menu button once to register for task assignments. Use the menu to view posts, members, admins and rules.\n\nUse /posts to view your assigned posts, /done TASK_ID | your comment to report your comment, and /confirm TASK_ID after liking and saving.\n\n📸 Saves: submit Instagram links and screenshots or screen recordings in the Saves chat during its open window.\n\n⚠️ The bot records reports but cannot independently verify Instagram likes, saves or comments.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
     if (savesChat(env, chatId)) return reply(env, chatId, "📸 SAVES — WEEKLY EVIDENCE CHAT\n\nPost Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\nOpen: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time.\n/evidence and /review are admin review commands.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
-    const menuText = "💗 STAR LINKS — DAILY ENGAGEMENT\n\nUse the menu below to open your assigned posts, view members/admins, or read the rules.\n\nPost your Instagram link in this chat. Engage with every assigned post within 24 hours: like, save and leave a meaningful comment of at least 3 words.\n\nCommands: /posts · /tasks · /rules · /done · /confirm";
+    const menuText = "💗 Welcome to Star Links, our daily engagement chat!\n\nLike and save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task. Engagement is required.\n\nExisting members, tap any menu button once to register for task assignments. Use the menu below to view posts, members, admins and rules.\n\nPost your Instagram link in this chat. Engage with every assigned post within 24 hours.\n\nUse /posts to see your assigned posts, /done TASK_ID | your comment to report your comment, and /confirm TASK_ID after liking and saving.";
     if (botUsername && String(chatId) === String(env.LINK_CHAT_ID)) {
       return telegram(env, "sendMessage", {
         chat_id: chatId, text: menuText, disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [
           [{ text: "📋 Posts", url: "https://t.me/" + botUsername + "?start=posts" }, { text: "👥 Members", url: "https://t.me/" + botUsername + "?start=members" }],
-          [{ text: "🛡️ Admins", url: "https://t.me/" + botUsername + "?start=admins" }, { text: "📜 Rules", url: "https://t.me/" + botUsername + "?start=rules" }]
+          [{ text: "💾 Saves", url: "https://t.me/+zvH-bkE_ZT45NTli" }, { text: "🛡️ Admins", url: "https://t.me/" + botUsername + "?start=admins" }],
+          [{ text: "📜 Rules", url: "https://t.me/" + botUsername + "?start=rules" }]
         ]}
       });
     }
@@ -441,7 +443,7 @@ async function handleUpdate(update, env) {
   if (text.startsWith("/tasks") || text.startsWith("/posts")) {
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
-    const ownOpen = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-20).reverse();
+    const ownOpen = data.tasks.filter(t => String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
     return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks (including overdue posts — please catch up on all of them):\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n${t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE — please complete this task" : "⏳ Deadline"}: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗")
   }
   if (text.startsWith("/done")) {
