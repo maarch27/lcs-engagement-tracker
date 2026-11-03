@@ -3,6 +3,7 @@ const GENERIC_COMMENTS = new Set(["nice", "nice post", "love it", "i like this p
 const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 const DB_PREFIX = "chat:";
 const SAVES_CHAT_ID = "-3760298679";
+const LINKS_CHAT_ID = "-3167895818";
 
 const IG_ADMINS = [
   ["maarch_27", "https://www.instagram.com/maarch_27/", "marriaammi"],
@@ -320,9 +321,11 @@ async function handleUpdate(update, env) {
   await saveChat(env, chat.id, data);
   const dueDisplay = dueAt.replace("T", " ").replace(".000Z", " UTC");
   await reply(env, msg.replyChatId || chat.id,
-    "📌 Telegram link task created: " + ids.join(", ") + "\nInstruction: " + instruction +
-    "\n24-hour deadline: " + dueDisplay + "\nPlease like + save and leave the requested comment.\n" +
-    "Report with /done TASK_ID | your comment. Instagram likes and saves are not independently verified.", msg.message_id);
+    "🔥 Thank you " + nameOf(user) + " for sharing your Instagram post!\\n" +
+    "✅ Tracked task: " + ids.join(", ") + "\\n" +
+    "⏳ Complete engagement within 24 hours: " + dueDisplay + "\\n" +
+    "💗 Everyone: like + save and leave the requested comment (3+ meaningful words unless the post says otherwise).\\n" +
+    "Report with /done TASK_ID | your comment. The bot records reports but cannot verify Instagram likes or saves.", msg.message_id);
 }
 
 async function rules(env, chatId) {
@@ -467,7 +470,7 @@ async function trackMemberUpdate(update, env) {
     const name = htmlEscape(nameOf(member.user));
     await telegram(env, "sendMessage", {
       chat_id: chat.id,
-      text: "💗 Welcome " + name + "! Welcome to our engagement chat. Use the menu below to get started.",
+      text: welcomeMemberText(chat.id, name),
       parse_mode: "HTML",
       reply_markup: persistentMenuKeyboard(),
     });
@@ -519,10 +522,30 @@ function persistentMenuKeyboard() {
   };
 }
 
+function welcomeMemberText(chatId, name) {
+  if (String(chatId) === LINKS_CHAT_ID) {
+    return "💗 Welcome " + name + " to Star Links!\\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Please complete every assigned task; engagement is required and cannot be skipped.";
+  }
+  if (String(chatId) === SAVES_CHAT_ID) {
+    return "💗 Welcome " + name + " to Star Saves!\\nThis chat is for Sunday save links and #WARNING notices. Daily link engagement happens in Star Links.";
+  }
+  return "💗 Welcome " + name + " to our engagement chat! Use the menu below to get started.";
+}
+
+function menuWelcomeText(chatId) {
+  if (String(chatId) === LINKS_CHAT_ID) {
+    return "💗 Welcome to Star Links!\\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task; engagement is required and cannot be skipped. Use the menu below to view posts, members, admins, and rules.";
+  }
+  if (String(chatId) === SAVES_CHAT_ID) {
+    return "💗 Welcome to Star Saves!\\nPost Sunday save links and #WARNING notices here. Daily link engagement happens in Star Links. Use the menu below for help.";
+  }
+  return "💗 Welcome to the LCS Engagement Tracker!\\nChoose a section below. Posts show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
+}
+
 async function sendMenu(env, chatId, isGroup = false) {
   return telegram(env, "sendMessage", {
     chat_id: chatId,
-    text: "💗 Welcome to the LCS Engagement Tracker!\\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
+    text: isGroup ? menuWelcomeText(chatId) : "💗 Welcome to the LCS Engagement Tracker!\\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
     reply_markup: isGroup ? persistentMenuKeyboard() : menuKeyboard(),
     disable_web_page_preview: true,
   });
