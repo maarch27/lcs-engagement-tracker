@@ -15,7 +15,7 @@ export default {
       });
       return new Response(await result.text(), { status: result.status, headers: { "content-type": "application/json" } });
     }
-    if (request.method !== "POST") return new Response("LCS Engagement Tracker webhook is ready.");
+    if (request.method !== "POST") return new Response("Star Links Engagement Tracker webhook is ready.");
     const secret = env.WEBHOOK_SECRET;
     if (!secret || request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== secret) {
       return new Response("Unauthorized", { status: 401 });
@@ -56,6 +56,25 @@ async function load(env, chatId) {
 async function save(env, chatId, data) {
   await env.LCS_DATA.put(`chat:${chatId}`, JSON.stringify(data));
 }
+
+async function loadGlobal(env, key, fallback) {
+  return await env.LCS_DATA.get(`global:${key}`, "json") || fallback;
+}
+async function saveGlobal(env, key, value) {
+  await env.LCS_DATA.put(`global:${key}`, JSON.stringify(value));
+}
+function monthKey(date = new Date()) {
+  return date.toISOString().slice(0, 7);
+}
+function monthlyWarnings(warnings, userId, month = monthKey()) {
+  return warnings.filter(w => String(w.userId) === String(userId) && w.month === month);
+}
+function savesChat(env, chatId) {
+  return !!env.SAVES_CHAT_ID && String(chatId) === String(env.SAVES_CHAT_ID);
+}
+async function sendPrivate(env, userId, text) {
+  return telegram(env, "sendMessage", { chat_id: userId, text, disable_web_page_preview: true });
+}
 function nameOf(user) { return user.username ? "@" + user.username : (user.first_name || "member"); }
 function dateNow() { return new Date().toISOString(); }
 function tbilisiParts(date = new Date()) {
@@ -90,11 +109,79 @@ async function handleUpdate(update, env) {
   const text = msg.text || msg.caption || "";
   if (text.startsWith("/start") || text.startsWith("/help")) {
     return reply(env, chatId,
-      "💗 Welcome to the LCS Engagement Tracker!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view your engagement tasks\n/rules — read the community rules\n/done TASK_ID | your comment — report your comment\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n/tracked — privately view tracked posts (admins)\n/remove TASK_ID — stop tracking a post (admins)\n\n💌 NEED HELP?\nMembers and admins can contact the admin team: @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nPlease remember to like, save, and leave a meaningful comment on each assigned post. 💗");
+      "💗 Welcome to Star Links — Daily Engagement!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view engagement tasks\n/rules — community rules\n/done TASK_ID | your comment — report your comment\n/warnings — view your current-month warning count\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n/tracked — privately view tracked posts (admins)\n/warnings — view warning summary (admins)\n/warn USER_ID | reason — issue a warning (admins)\n/approvepost USER_ID — approve one early post (admins)\n/evidence — list recent submitted evidence (admins)\n\n📸 SAVES CHAT\nSend screenshots or screen recordings as evidence. Admins can use /warnings, /warn, /evidence and /review.\n\n💌 NEED HELP?\nContact @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nThe bot never deletes messages or auto-bans members. Instagram likes/saves cannot be verified directly by the bot. 💗");
   }
   if (text.startsWith("/rules")) {
     return reply(env, chatId,
-      "💗 LCS engagement rules\n1. Like and save each assigned post.\n2. Leave a genuine, relevant comment following the post instructions.\n3. If no special instruction is given, leave a meaningful comment.\n4. Emoji-only comments are acceptable only when explicitly requested.\n5. Avoid generic comments.\n6. Report with /done TASK_ID | your comment.\n\nCompletion is self-reported; likes/saves cannot be independently verified. Admins review flags manually.");
+      "💗 Star Links engagement rules\n1. Like and save each assigned post.\n2. Leave a genuine, relevant comment following the post instructions.\n3. If no special instruction is given, leave a meaningful comment.\n4. Emoji-only comments are acceptable only when explicitly requested.\n5. Avoid generic comments.\n6. Report with /done TASK_ID | your comment.\n7. Each member may submit a new Instagram post once every 24 hours. An admin can approve an earlier post with /approvepost USER_ID.\n8. Evidence goes in the designated saves chat: screenshots or screen recordings.\n\nWarnings are counted by calendar month. At 5 warnings, the bot applies a posting limit until the next month and alerts admins. It does not ban members or delete messages. Completion and evidence require human review; likes/saves cannot be independently verified by the bot.");
+  }
+  // Warning/evidence commands are backed by shared KV records so the saves chat and main group can share moderation history.
+  if (text.startsWith("/warnings")) {
+    const warnings = await loadGlobal(env, "warnings", []);
+    const memberRows = monthlyWarnings(warnings, user.id);
+    const admin = await isAdmin(env, chatId, user.id, user.username);
+    if (!admin) return reply(env, chatId, `⚠️ Your warnings this month: ${memberRows.length}/5.${memberRows.length >= 5 ? "\\n‼️ Your posting limit is active until next month." : ""}`);
+    const grouped = new Map();
+    for (const w of warnings.filter(x => x.month === monthKey())) {
+      const key = String(w.userId);
+      const current = grouped.get(key) || { name: w.name, count: 0 };
+      current.count++;
+      grouped.set(key, current);
+    }
+    const rows = [...grouped.entries()].sort((a,b) => b[1].count-a[1].count).slice(0,50);
+    return reply(env, chatId, rows.length ? "‼️ Monthly warnings (" + monthKey() + ")\\n\\n" + rows.map(([id, v]) => `${v.name} (ID ${id}): ${v.count}/5${v.count >= 5 ? " — POSTING LIMIT ACTIVE" : ""}`).join("\\n") : "No warnings this month 💗");
+  }
+  if (text.startsWith("/warn")) {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can issue warnings.");
+    let target = msg.reply_to_message && msg.reply_to_message.from;
+    let reason = "";
+    const match = text.match(/^\\/warn(?:@\\w+)?\\s+(\\d+)\\s*\\|\\s*(.+)$/s);
+    if (match) {
+      target = { id: Number(match[1]), first_name: "Member" };
+      reason = match[2].trim();
+    } else if (msg.reply_to_message && text.match(/^\\/warn(?:@\\w+)?(?:\\s+(.+))?$/s)) {
+      reason = (text.match(/^\\/warn(?:@\\w+)?(?:\\s+(.+))?$/s) || [,"No reason provided"])[1] || "No reason provided";
+    } else {
+      return reply(env, chatId, "Reply to a member's message with /warn reason, or use /warn USER_ID | reason.");
+    }
+    if (!target || !target.id) return reply(env, chatId, "I couldn't identify that member. Reply to one of their messages or use their numeric Telegram user ID.");
+    const warnings = await loadGlobal(env, "warnings", []);
+    const count = monthlyWarnings(warnings, target.id).length + 1;
+    const warning = { id: warnings.length ? Math.max(...warnings.map(w => w.id || 0)) + 1 : 1, userId: target.id, name: nameOf(target), adminId: user.id, adminName: nameOf(user), reason: reason.slice(0,500), month: monthKey(), at: dateNow(), count };
+    warnings.push(warning);
+    await saveGlobal(env, "warnings", warnings);
+    const limitActive = count >= 5;
+    await sendPrivate(env, target.id, `‼️ Star Links warning ${count}/5 for ${monthKey()}\\nReason: ${warning.reason}${limitActive ? "\\n\\n⛔ Your posting limit is now active until the next calendar month. This is not a ban." : ""}`);
+    if (limitActive) {
+      const limits = await loadGlobal(env, "limits", {});
+      limits[String(target.id)] = { untilMonth: monthKey(), reason: "Reached 5 warnings in one calendar month", at: dateNow() };
+      await saveGlobal(env, "limits", limits);
+    }
+    return reply(env, chatId, `‼️ Warning ${count}/5 recorded for ${warning.name} (ID ${target.id}).${limitActive ? " Posting limit activated until next month; no ban applied." : ""}`);
+  }
+  if (text.startsWith("/approvepost")) {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can approve early posts.");
+    const match = text.match(/^\\/approvepost(?:@\\w+)?\\s+(\\d+)$/);
+    if (!match) return reply(env, chatId, "Format: /approvepost USER_ID");
+    const approvals = await loadGlobal(env, "postApprovals", {});
+    approvals[String(match[1])] = { approvedBy: user.id, at: dateNow(), used: false };
+    await saveGlobal(env, "postApprovals", approvals);
+    return reply(env, chatId, `✅ One early-post approval is ready for Telegram user ID ${match[1]}. It will be used on their next Instagram link.`);
+  }
+  if (text.startsWith("/evidence") || text.startsWith("/review")) {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can review evidence.");
+    const evidence = await loadGlobal(env, "evidence", []);
+    const rows = evidence.slice(-15).reverse();
+    return reply(env, chatId, rows.length ? "📸 Recent evidence submissions (manual review)\\n\\n" + rows.map(e => `Evidence #${e.id} · ${e.name} (ID ${e.userId})\\nType: ${e.type} · ${e.at}\\n${e.caption || "No caption"}${e.fileId ? "\\nTelegram file ID saved" : ""}`).join("\\n\\n") : "No evidence submissions recorded yet.");
+  }
+  // Save-chat evidence mode: record incoming images/videos/documents without cluttering the chat with bot replies.
+  if (savesChat(env, chatId) && (msg.photo || msg.video || msg.document || msg.animation || msg.video_note)) {
+    const evidence = await loadGlobal(env, "evidence", []);
+    const fileId = msg.photo ? msg.photo[msg.photo.length - 1].file_id : (msg.video || msg.document || msg.animation || msg.video_note || {}).file_id;
+    const type = msg.photo ? "screenshot/photo" : msg.video ? "screen recording/video" : msg.video_note ? "video note" : msg.animation ? "animation" : "document";
+    evidence.push({ id: evidence.length ? Math.max(...evidence.map(e => e.id || 0)) + 1 : 1, userId: user.id, name: nameOf(user), chatId, type, fileId, caption: (msg.caption || "").slice(0,300), messageId: msg.message_id, at: dateNow(), status: "pending_review" });
+    await saveGlobal(env, "evidence", evidence);
+    return;
   }
   if (text.startsWith("/tracked") || text.startsWith("/remove")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
@@ -128,7 +215,7 @@ async function handleUpdate(update, env) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
     const data = await load(env, chatId);
     if (text.startsWith("/admin")) return reply(env, chatId,
-      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n/tracked — privately view tracked posts\n/remove TASK_ID — remove a tracked post\n\nTrusted admins (@marriaammi, @Lizal, @itsimplymartha, @drlamarya) and native Telegram group admins can post freely. The bot never auto-deletes admin messages or auto-bans members. Flags are review prompts, not proof. Instagram likes/saves are not independently verified.");
+      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n/tracked — privately view tracked posts\n/warnings — monthly warning summary\n/warn USER_ID | reason — issue a warning (or reply to a member's message with /warn reason)\n/approvepost USER_ID — approve one early post\n/evidence — list recent screenshot/screen-recording submissions\n\nAt 5 warnings in a calendar month, a posting limit is applied until next month and the member/admins are notified. No auto-ban or auto-delete. Instagram likes/saves are not independently verified.");
     if (text.startsWith("/flags")) {
       const rows = data.flags.slice(-20).reverse();
       return reply(env, chatId, rows.length ? "🔎 Recent flags (manual review):\n\n" + rows.map(f => `Flag #${f.id} · ${f.name}\n${f.reason}\n${f.at}`).join("\n\n") + "\n\nNo automatic bans are applied." : "No flagged comments to review 💗");
@@ -138,7 +225,7 @@ async function handleUpdate(update, env) {
     const doneCount = data.completions.filter(c => c.at.slice(0,10) === today).length;
     const openCount = data.tasks.filter(t => !data.completions.some(c => c.taskId === t.id)).length;
     const flags = data.flags.filter(f => f.at.slice(0,10) === today);
-    return reply(env, chatId, `📊 LCS daily report (UTC)\nTasks posted today: ${taskCount}\nCompletion self-reports today: ${doneCount}\nUnreported task entries: ${openCount}\nFlags today: ${flags.length}\n\nCompletion is self-reported; likes/saves are not independently verified.`);
+    return reply(env, chatId, `📊 Star Links daily report (UTC)\nTasks posted today: ${taskCount}\nCompletion self-reports today: ${doneCount}\nUnreported task entries: ${openCount}\nFlags today: ${flags.length}\n\nCompletion is self-reported; likes/saves are not independently verified.`);
   }
   if (text.startsWith("/tasks")) {
     const data = await load(env, chatId);
@@ -172,6 +259,25 @@ async function handleUpdate(update, env) {
   const links = text.match(IG_RE);
   if (!links || !user) return;
   const data = await load(env, chatId);
+  const limits = await loadGlobal(env, "limits", {});
+  const currentLimit = limits[String(user.id)];
+  if (currentLimit && currentLimit.untilMonth === monthKey()) {
+    await reply(env, chatId, `‼️ ${nameOf(user)}, your posting limit is active because you reached 5 warnings this month. You can post again next month. Your message has not been deleted.`, msg.message_id);
+    return;
+  }
+  const approvals = await loadGlobal(env, "postApprovals", {});
+  const approval = approvals[String(user.id)];
+  const lastPost = data.tasks.filter(t => String(t.posterId) === String(user.id)).sort((a,b) => new Date(b.at)-new Date(a.at))[0];
+  const elapsed = lastPost ? Date.now() - new Date(lastPost.at).getTime() : Infinity;
+  if (lastPost && elapsed < 24 * 60 * 60 * 1000 && !(approval && !approval.used)) {
+    const availableAt = new Date(new Date(lastPost.at).getTime() + 24 * 60 * 60 * 1000);
+    await reply(env, chatId, `⏳ ${nameOf(user)}, you can submit another post after ${formatGeorgian(availableAt.toISOString())}. An admin can approve an exception with /approvepost ${user.id}. Your message has not been deleted and was not added as a task.`, msg.message_id);
+    return;
+  }
+  if (approval && !approval.used) {
+    approvals[String(user.id)] = { ...approval, used: true, usedAt: dateNow() };
+    await saveGlobal(env, "postApprovals", approvals);
+  }
   let instruction = "ALL";
   const lower = text.toLowerCase();
   if (lower.includes("emoji only") || lower.includes("emoji-only")) instruction = "EMOJI_ONLY";
@@ -189,7 +295,7 @@ async function handleUpdate(update, env) {
   await save(env, chatId, data);
   const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id));
   const latestTask = data.tasks.find(t => t.id === Number(ids[0].slice(1)));
-  const note = `💗 Thank you ${nameOf(user)} for sharing your Instagram post!\n\n✅ Your post has been added to the LCS Engagement Tracker.\n📌 Task ID: ${ids.join(", ")}\n⏳ Daily engagement deadline: ${formatGeorgian(latestTask.deadline)}\n\n💗 Please make sure to engage with the other posts in this cycle: like + save and leave the requested, meaningful comment (3+ words unless the post says otherwise).\n\nUse /tasks to review outstanding tasks. Report completion in the group with /done TASK_ID | your comment.\n\nℹ️ The bot records self-reports; it cannot independently verify Instagram likes or saves.`;
+  const note = `💗 Thank you ${nameOf(user)} for sharing your Instagram post!\n\n✅ Your post has been added to the Star Links Engagement Tracker.\n📌 Task ID: ${ids.join(", ")}\n⏳ Daily engagement deadline: ${formatGeorgian(latestTask.deadline)}\n\n💗 Please make sure to engage with the other posts in this cycle: like + save and leave the requested, meaningful comment (3+ words unless the post says otherwise).\n\nUse /tasks to review outstanding tasks. Report completion in the group with /done TASK_ID | your comment.\n\nℹ️ The bot records self-reports; it cannot independently verify Instagram likes or saves.`;
   // Send this confirmation privately to the person who shared the link. Never post the notification in the group.
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
   if (!dm.ok) console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
