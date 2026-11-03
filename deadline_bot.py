@@ -246,10 +246,6 @@ async def review_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         notice = "🚨 FINAL WARNING — further missed deadlines may lead to removal after admin review."
     await msg.reply_text(f"{notice}\nMember: {violation['user_name']}\n{reason}")
-    try:
-        await context.bot.send_message(chat_id=chat.id, text=f"{notice}\nMember: {violation['user_name']}\n{reason}")
-    except Exception:
-        pass
 
 
 async def issue_manual_warning(update: Update, context: ContextTypes.DEFAULT_TYPE, final=False):
@@ -391,8 +387,7 @@ async def nightly_review(context: ContextTypes.DEFAULT_TYPE):
         return
     conn = connect_db()
     due_tasks = conn.execute("SELECT * FROM tasks WHERE due_at<=?", (iso(),)).fetchall()
-    new_count = 0
-    chats = {}
+    counts_by_chat = {}
     for task in due_tasks:
         targets = conn.execute(
             "SELECT x.user_id,x.user_name FROM task_targets x "
@@ -408,15 +403,14 @@ async def nightly_review(context: ContextTypes.DEFAULT_TYPE):
                  f"No completion report for task #{task['id']} after the 24-hour deadline. This is not proof that the Instagram actions were skipped.", iso()),
             )
             if cur.rowcount:
-                new_count += 1
-                chats[task["chat_id"]] = True
+                counts_by_chat[task["chat_id"]] = counts_by_chat.get(task["chat_id"], 0) + 1
     conn.commit()
     conn.close()
-    for chat_id in chats:
+    for chat_id, count in counts_by_chat.items():
         try:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"🌙 Nightly check ({local_now.strftime('%H:%M')} Georgia time): {new_count} overdue task assignment(s) queued for admin review. No warning has been issued automatically. Admins: use /review."
+                text=f"🌙 Nightly check ({local_now.strftime('%H:%M')} Georgia time): {count} overdue task assignment(s) queued for admin review. No warning has been issued automatically. Admins: use /review."
             )
         except Exception:
             log.exception("Could not post nightly review summary to %s", chat_id)
