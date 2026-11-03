@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lcs-engagement-tracker",
+  "main": "cloudflare-worker.js",
+  "compatibility_date": "2026-11-03",
+  "workers_dev": true,
+  "kv_namespaces": [
+    {
+      "binding": "LCS_DATA",
+      "id": "16e4966a0dbe41f29a6f3083e689984e"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "0,15,30,45 16 * * *"
+    ]
+  }
+}
