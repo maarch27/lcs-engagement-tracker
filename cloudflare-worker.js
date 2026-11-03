@@ -284,7 +284,7 @@ async function handleUpdate(update, env) {
       await save(env, chatId, roster);
     }
   }
-  const deepStart = chat.type === "private" ? text.match(/^\/start(?:@\w+)?(?:\s+(posts|members|admins|rules))?(?:\s|$)/i) : null;
+  const deepStart = chat.type === "private" ? text.match(/^\/start(?:@\w+)?(?:\s+(posts|members|admins|rules|warnings))?(?:\s|$)/i) : null;
   if (deepStart && deepStart[1]) {
     const section = deepStart[1].toLowerCase();
     if (section === "posts") {
@@ -309,6 +309,7 @@ async function handleUpdate(update, env) {
     const data = await load(env, env.LINK_CHAT_ID);
     if (section === "rules") return reply(env, chatId, "💗 STAR LINKS RULES\n\n1. Like and save every assigned post.\n2. Leave a meaningful, relevant comment of at least 3 words unless the post says otherwise.\n3. Complete every assigned post; do not skip tasks.\n4. Submit your comment with /done TASK_ID | your comment, then use /confirm TASK_ID after liking and saving.\n5. Post only one Instagram link every 24 hours unless an admin approves an exception.\n6. Instagram actions are self-reported; the bot cannot independently verify them.");
     if (section === "admins") return reply(env, chatId, "🛡️ STAR LINKS ADMINS\n\n@marriaammi\n@lizal\n@itsimplymartha\n@drlamarya");
+    if (section === "warnings") return reply(env, chatId, "🛡️ WARNINGS & REPORTS\n\nUse #WARNING in Star Saves to flag an issue for admin review. Use #IMBACK when returning. These tags do not automatically issue a formal warning. Admins review reports and handle formal warnings.");
     const members = (data.participants || []).slice(-100).reverse();
     return reply(env, chatId, members.length ? "👥 MEMBERS SEEN BY THE BOT\n\n" + members.map(p => p.username ? "@" + p.username.replace(/^@/, "") : p.name).join("\n") + "\n\nNote: this list includes members the bot has observed, not necessarily every group member." : "👥 No members have been recorded yet. Members appear here after they send a message in Star Links.");
   }
@@ -325,15 +326,18 @@ async function handleUpdate(update, env) {
     if (savesChat(env, chatId)) return reply(env, chatId, "📸 STAR SAVES — WEEKLY EVIDENCE CHAT\n\nPost the Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\n🗓️ Open: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time. The bot will remind members during the window and send a weekly report to the admin Warnings chat.\n\nUse #WARNING with a member username or reply to their message to flag an issue for admin review. Use #IMBACK when returning and then catch up on outstanding Posts in the private bot. Tags are recorded for review; they do not automatically issue warnings.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
-    const menuText = "💗 STAR LINKS\n\nOne menu for everything — use the buttons below instead of sending repeated commands.\n\n📋 Posts: view your assigned Instagram links and time remaining in private chat.\n💾 Saves: submit links + screenshot/recording evidence during the weekly window.\n\nFor each assigned post, comment first with /done TASK_ID | your comment, then use /confirm TASK_ID after liking and saving.\n\nIn Star Saves, use #WARNING to flag an issue for admin review and #IMBACK when returning. Tags are reviewed by admins; they do not automatically issue warnings.";
+    const menuText = "💗 STAR LINKS\\n\\nYour community hub — choose a section below.\\n\\n📋 Posts: your assigned Instagram links and deadlines.\\n💬 Chat: the always-open conversation group.\\n💾 Saves: weekly submissions and evidence.\\n🛡️ Warnings: flags and admin review.\\n📜 Rules: community guidelines.\\n👑 Admins: contact the moderators.\\n👥 Members: members observed by the bot.\\n\\nFor each assigned post, use /done TASK_ID | your comment, then /confirm TASK_ID after liking and saving. Instagram actions are self-reported and are not independently verified by the bot.";
     if (botUsername && String(chatId) === String(env.LINK_CHAT_ID)) {
+      const botUrl = "https://t.me/" + botUsername;
+      const rows = [
+        [{ text: "📋 Posts", url: botUrl + "?start=posts" }, { text: "💬 Chat", url: env.CHAT_CHAT_URL || botUrl + "?start=chat" }],
+        [{ text: "💾 Saves", url: "https://t.me/+zvH-bkE_ZT45NTli" }, { text: "🛡️ Warnings", url: botUrl + "?start=warnings" }],
+        [{ text: "📜 Rules", url: botUrl + "?start=rules" }, { text: "👑 Admins", url: botUrl + "?start=admins" }],
+        [{ text: "👥 Members", url: botUrl + "?start=members" }]
+      ];
       return telegram(env, "sendMessage", {
         chat_id: chatId, text: menuText, disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [
-          [{ text: "📋 Posts", url: "https://t.me/" + botUsername + "?start=posts" }, { text: "👥 Members", url: "https://t.me/" + botUsername + "?start=members" }],
-          [{ text: "💾 Saves", url: "https://t.me/+zvH-bkE_ZT45NTli" }, { text: "🛡️ Admins", url: "https://t.me/" + botUsername + "?start=admins" }],
-          [{ text: "📜 Rules", url: "https://t.me/" + botUsername + "?start=rules" }]
-        ]}
+        reply_markup: { inline_keyboard: rows }
       });
     }
     return reply(env, chatId, menuText + "\n\n⚠️ Menu buttons are not configured yet. Admin: deploy the latest Worker and run /setup?key=SETUP_KEY.");
