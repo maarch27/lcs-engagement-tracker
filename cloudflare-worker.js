@@ -4,7 +4,17 @@ const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 
 export default {
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(sendWeeklyEvidenceReport(env, controller.scheduledTime ? new Date(controller.scheduledTime) : new Date()));
+    const cron = controller.cron || "";
+    if (cron === "0 20 * * SAT") {
+      ctx.waitUntil(setSavesChatOpen(env, true));
+    } else if (cron === "0 20 * * SUN") {
+      ctx.waitUntil((async () => {
+        await setSavesChatOpen(env, false);
+        await sendWeeklyEvidenceReport(env, controller.scheduledTime ? new Date(controller.scheduledTime) : new Date());
+      })());
+    } else {
+      console.error("Unknown scheduled cron trigger:", cron);
+    }
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -104,6 +114,27 @@ function formatGeorgian(dateString) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(dateString)) + " Georgia time";
 }
 
+async function setSavesChatOpen(env, open) {
+  if (!env.SAVES_CHAT_ID || !env.TELEGRAM_BOT_TOKEN) {
+    console.error("Saves chat permissions unchanged: configure SAVES_CHAT_ID and TELEGRAM_BOT_TOKEN.");
+    return;
+  }
+  const permissions = open ? {
+    can_send_messages: true, can_send_audios: true, can_send_documents: true,
+    can_send_photos: true, can_send_videos: true, can_send_video_notes: true,
+    can_send_voice_notes: true, can_send_polls: true, can_send_other_messages: true,
+    can_add_web_page_previews: true, can_change_info: false, can_invite_users: false,
+    can_pin_messages: false, use_independent_chat_permissions: true
+  } : {
+    can_send_messages: false, can_send_audios: false, can_send_documents: false,
+    can_send_photos: false, can_send_videos: false, can_send_video_notes: false,
+    can_send_voice_notes: false, can_send_polls: false, can_send_other_messages: false,
+    can_add_web_page_previews: false, can_change_info: false, can_invite_users: false,
+    can_pin_messages: false, use_independent_chat_permissions: true
+  };
+  const response = await telegram(env, "setChatPermissions", { chat_id: env.SAVES_CHAT_ID, permissions });
+  if (response.ok) console.log("Saves chat", open ? "opened" : "closed");
+}
 function georgianDateKey(date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
