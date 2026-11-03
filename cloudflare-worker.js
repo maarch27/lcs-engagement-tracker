@@ -288,7 +288,10 @@ async function handleUpdate(update, env) {
   if (deepStart && deepStart[1]) {
     const section = deepStart[1].toLowerCase();
     if (section === "post") {
-      await saveGlobal(env, "postDraft:" + user.id, { state: "awaiting_link", at: dateNow() });\n      return reply(env, chatId, "📸 SUBMIT YOUR INSTAGRAM POST\n\nSend your Instagram post or Reel link here privately. Add any special comment instructions after the link (optional).\n\nThe bot checks your 24-hour posting eligibility and queues your post for admin review. Review usually takes around 3–5 minutes, but approval is not automatic.");\n    }\n    if (section === "posts") {
+      await saveGlobal(env, "postDraft:" + user.id, { state: "awaiting_link", at: dateNow() });
+      return reply(env, chatId, "📸 SUBMIT YOUR INSTAGRAM POST\\n\\nSend your Instagram post or Reel link here privately. Add any special comment instructions after the link (optional).\\n\\nThe bot checks your 24-hour posting eligibility and queues your post for admin review. Review usually takes around 3–5 minutes, but approval is not automatic.");
+    }
+    if (section === "posts") {
       if (!env.LINK_CHAT_ID) return reply(env, chatId, "⚠️ The Posts menu is not connected yet. The bot admin needs to configure LINK_CHAT_ID in Cloudflare.");
       const data = await load(env, env.LINK_CHAT_ID);
       const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
