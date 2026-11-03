@@ -338,7 +338,7 @@ async function handleUpdate(update, env) {
         ];
         return telegram(env, "sendMessage", {
           chat_id: chatId,
-          text: "🛠 STAR LINKS ADMIN PANEL\\n\\n/admin — reopen admin controls\\n/report — daily task summary\\n/tracked — latest tracked posts privately\\n/check TASK_ID — task reports\\n/warnings — monthly warning summary\\n/warn USER_ID | reason — issue a warning\\n/reviewposts — pending submissions\\n/approve TASK_ID — publish an approved submission\\n/reject TASK_ID | reason — reject a submission\\n/evidence — review Saves submissions\\n/flags — review flagged comments\\n\\nUse the menu below to navigate the community sections.",
+          text: "🛠 STAR LINKS ADMIN PANEL\n\n/admin — reopen admin controls\n/report — daily task summary\n/tracked — latest tracked posts privately\n/check TASK_ID — task reports\n/warnings — monthly warning summary\n/warn USER_ID | reason — issue a warning\n/reviewposts — pending submissions\n/approve TASK_ID — publish an approved submission\n/reject TASK_ID | reason — reject a submission\n/evidence — review Saves submissions\n/flags — review flagged comments\n\nUse the menu below to navigate the community sections.\n\nGitHub repository: https://github.com/maarch27/lcs-engagement-tracker",
           disable_web_page_preview: true,
           reply_markup: { inline_keyboard: adminRows }
         });
@@ -353,7 +353,7 @@ async function handleUpdate(update, env) {
       ];
       return telegram(env, "sendMessage", {
         chat_id: chatId,
-        text: "💗 STAR LINKS\n\nChoose a section below.\n\n📸 Post — submit your Instagram link privately.\n📋 Posts — assigned engagement links and deadlines.\n👥 Members — community Instagram profile directory.\n👩🏻‍💼 Admin — contact moderators.\n💾 Saves & Warnings — weekly evidence and reports.\n📜 Rules — community guidelines.",
+        text: "💗 STAR LINKS — ENGAGEMENT COMMUNITY\n\nChoose a section below.\n\n📸 Post — privately submit your Instagram post/Reel for admin approval.\n📋 Posts — view assigned links and deadlines.\n👥 Members — discover community Instagram profiles.\n👩🏻‍💼 Admin — contact moderators.\n💾 Saves & Warnings — weekly evidence and reports.\n📜 Rules — read community guidelines.\n\nGitHub repository: https://github.com/maarch27/lcs-engagement-tracker",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: privateMenu }
       });
@@ -361,7 +361,7 @@ async function handleUpdate(update, env) {
     if (savesChat(env, chatId)) return reply(env, chatId, "📸 STAR SAVES — WEEKLY EVIDENCE CHAT\n\nPost the Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\n🗓️ Open: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time. The bot will remind members during the window and send a weekly report to the admin Warnings chat.\n\nUse #WARNING with a member username or reply to their message to flag an issue for admin review. Use #IMBACK when returning and then catch up on outstanding Posts in the private bot. Tags are recorded for review; they do not automatically issue warnings.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
-    const menuText = "💗 STAR LINKS\n\nChoose a section below.\n\n📸 Post: submit your Instagram link privately for review.\n📋 Posts: assigned engagement links and deadlines.\n👥 Members: community Instagram profile directory.\n👩🏻‍💼 Admin: moderator contacts.\n💾 Saves & Warnings: weekly evidence and reports.\n📜 Rules: community guidelines.";
+    const menuText = "💗 STAR LINKS — ENGAGEMENT COMMUNITY\n\nChoose a section below.\n\n📸 Post — privately submit your Instagram post/Reel for admin approval.\n📋 Posts — view assigned links and deadlines.\n👥 Members — discover community Instagram profiles.\n👩🏻‍💼 Admin — contact moderators.\n💾 Saves & Warnings — weekly evidence and reports.\n📜 Rules — read community guidelines.\n\nGitHub repository: https://github.com/maarch27/lcs-engagement-tracker";
     if (botUsername && String(chatId) === String(env.LINK_CHAT_ID)) {
       const botUrl = "https://t.me/" + botUsername;
       const rows = [
