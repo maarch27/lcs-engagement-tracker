@@ -321,10 +321,10 @@ async function handleUpdate(update, env) {
   await saveChat(env, chat.id, data);
   const dueDisplay = dueAt.replace("T", " ").replace(".000Z", " UTC");
   await reply(env, msg.replyChatId || chat.id,
-    "🔥 Thank you " + nameOf(user) + " for sharing your Instagram post!\\n" +
-    "✅ Tracked task: " + ids.join(", ") + "\\n" +
-    "⏳ Complete engagement within 24 hours: " + dueDisplay + "\\n" +
-    "💗 Everyone: like + save and leave the requested comment (3+ meaningful words unless the post says otherwise).\\n" +
+    "🔥 Thank you " + nameOf(user) + " for sharing your Instagram post!\n" +
+    "✅ Tracked task: " + ids.join(", ") + "\n" +
+    "⏳ Complete engagement within 24 hours: " + dueDisplay + "\n" +
+    "💗 Everyone: like + save and leave the requested comment (3+ meaningful words unless the post says otherwise).\n" +
     "Report with /done TASK_ID | your comment. The bot records reports but cannot verify Instagram likes or saves.", msg.message_id);
 }
 
@@ -524,28 +524,28 @@ function persistentMenuKeyboard() {
 
 function welcomeMemberText(chatId, name) {
   if (String(chatId) === LINKS_CHAT_ID) {
-    return "💗 Welcome " + name + " to Star Links!\\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Please complete every assigned task; engagement is required and cannot be skipped.";
+    return "💗 Welcome " + name + " to Star Links!\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Please complete every assigned task; engagement is required and cannot be skipped.";
   }
   if (String(chatId) === SAVES_CHAT_ID) {
-    return "💗 Welcome " + name + " to Star Saves!\\nThis chat is for Sunday save links and #WARNING notices. Daily link engagement happens in Star Links.";
+    return "💗 Welcome " + name + " to Star Saves!\nThis chat is for Sunday save links and #WARNING notices. Daily link engagement happens in Star Links.";
   }
   return "💗 Welcome " + name + " to our engagement chat! Use the menu below to get started.";
 }
 
 function menuWelcomeText(chatId) {
   if (String(chatId) === LINKS_CHAT_ID) {
-    return "💗 Welcome to Star Links!\\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task; engagement is required and cannot be skipped. Use the menu below to view posts, members, admins, and rules.";
+    return "💗 Welcome to Star Links!\nEngagement happens daily here. Like + save each assigned Instagram post and leave a meaningful comment of at least 3 words. Complete every assigned task; engagement is required and cannot be skipped. Use the menu below to view posts, members, admins, and rules.";
   }
   if (String(chatId) === SAVES_CHAT_ID) {
-    return "💗 Welcome to Star Saves!\\nPost Sunday save links and #WARNING notices here. Daily link engagement happens in Star Links. Use the menu below for help.";
+    return "💗 Welcome to Star Saves!\nPost Sunday save links and #WARNING notices here. Daily link engagement happens in Star Links. Use the menu below for help.";
   }
-  return "💗 Welcome to the LCS Engagement Tracker!\\nChoose a section below. Posts show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
+  return "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
 }
 
 async function sendMenu(env, chatId, isGroup = false) {
   return telegram(env, "sendMessage", {
     chat_id: chatId,
-    text: isGroup ? menuWelcomeText(chatId) : "💗 Welcome to the LCS Engagement Tracker!\\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
+    text: isGroup ? menuWelcomeText(chatId) : "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
     reply_markup: isGroup ? persistentMenuKeyboard() : menuKeyboard(),
     disable_web_page_preview: true,
   });
@@ -565,16 +565,16 @@ async function handlePersistentMenu(env, chat, action) {
   if (action === "rules") {
     text = CHAT_RULES;
   } else if (action === "admins") {
-    text = "👑 <b>Admins — follow or message</b>\\n" + IG_ADMINS.map(([name, url, telegramUsername]) =>
-      "• <a href=\\\"" + url + "\\\">@"+ htmlEscape(name) + "</a> · <a href=\\\"https://t.me/" + telegramUsername + "\\\">Message on Telegram</a>"
-    ).join("\\n") + "\\n\\nUse the Instagram link to follow an admin, or the Telegram link to contact them.";
+    text = "👑 <b>Admins — follow or message</b>\n" + IG_ADMINS.map(([name, url, telegramUsername]) =>
+      "• <a href=\\"" + url + "\\">@"+ htmlEscape(name) + "</a> · <a href=\\"https://t.me/" + telegramUsername + "\\">Message on Telegram</a>"
+    ).join("\n") + "\n\nUse the Instagram link to follow an admin, or the Telegram link to contact them.";
   } else if (action === "members") {
     const page = 0;
     const pageSize = 10;
     const rows = IG_MEMBERS.slice(0, pageSize);
     const pageCount = Math.max(1, Math.ceil(IG_MEMBERS.length / pageSize));
     text = rows.length
-      ? "👥 <b>Members to follow</b> · page 1/" + pageCount + "\\n\\n" + rows.map(([name, url]) => "• <a href=\\\"" + url + "\\\">@"+ htmlEscape(name) + "</a>").join("\\n")
+      ? "👥 <b>Members to follow</b> · page 1/" + pageCount + "\n\n" + rows.map(([name, url]) => "• <a href=\\"" + url + "\\">@"+ htmlEscape(name) + "</a>").join("\n")
       : "👥 No member links are listed yet.";
     replyMarkup = menuPageButtons("list", page, pageCount);
   } else if (action === "posts") {
@@ -584,16 +584,16 @@ async function handlePersistentMenu(env, chat, action) {
     const pageCount = Math.max(1, Math.ceil(tasks.length / pageSize));
     const rows = tasks.slice(0, pageSize);
     text = rows.length
-      ? "📌 <b>Tracked posts</b> · page 1/" + pageCount + "\\n\\n" + rows.map(task =>
+      ? "📌 <b>Tracked posts</b> · page 1/" + pageCount + "\n\n" + rows.map(task =>
           "Task #" + task.id + " · " + htmlEscape(task.posterName || "member") + " · " + htmlEscape(task.instruction) +
-          "\\nDue: " + htmlEscape(task.dueAt) + "\\n<a href=\\\"" + htmlEscape(task.url) + "\\\">Open Instagram post</a>"
-        ).join("\\n\\n") + "\\n\\nUse /tasks to see your assignments or /done TASK_ID | your comment to report completion."
+          "\nDue: " + htmlEscape(task.dueAt) + "\n<a href=\\"" + htmlEscape(task.url) + "\\">Open Instagram post</a>"
+        ).join("\n\n") + "\n\nUse /tasks to see your assignments or /done TASK_ID | your comment to report completion."
       : "📌 No tasks yet. The bot starts tracking new Instagram links posted here; older messages from before setup are not imported.";
     replyMarkup = menuPageButtons("posts", 0, pageCount);
   } else if (action === "chats") {
-    text = "💬 <b>Tracker menu</b>\\nThis group is connected. Use Posts to see tracked links, Members to open Instagram profiles, and Admins to contact an admin.";
+    text = "💬 <b>Tracker menu</b>\nThis group is connected. Use Posts to see tracked links, Members to open Instagram profiles, and Admins to contact an admin.";
   } else if (action === "saves") {
-    text = "💾 <b>Saves Chat</b>\\nPost Sunday save links and #WARNING notices in the Saves chat. Likes and saves cannot be checked directly by the bot.";
+    text = "💾 <b>Saves Chat</b>\nPost Sunday save links and #WARNING notices in the Saves chat. Likes and saves cannot be checked directly by the bot.";
     replyMarkup = {
       inline_keyboard: [
         ...(env.SAVES_CHAT_INVITE_URL ? [[{ text: "💾 Open Saves Chat", url: env.SAVES_CHAT_INVITE_URL }]] : []),
