@@ -31,11 +31,9 @@ The `log` destination requires `FINAL_WARNING_CHAT_ID` in the host's environment
 
 ## Free Cloudflare Workers webhook version
 
-The `cloudflare-worker.js` file is a webhook version configured for Cloudflare Workers on the `nightly-deadline-review` branch. It creates a task when a group member posts an Instagram link, sets a rolling 24-hour deadline, sends private overdue reminders during the nightly Georgia-time review window, and queues overdue reports for an admin to review. Members must open the bot privately and press Start before Telegram allows private reminders. The Worker cannot verify Instagram activity.
+The `cloudflare-worker.js` file is a webhook version configured for Cloudflare Workers on the `nightly-deadline-review` branch. It creates a task when a group member posts an Instagram link, sets a rolling 24-hour deadline, sends private overdue reminders, and queues overdue reports for an admin to review. The daily review runs at 20:00 Europe/Paris. Members must open the bot privately and press Start before Telegram allows private reminders. The Worker cannot verify Instagram activity.
 
-The Worker currently supports the core commands `/start`, `/rules`, `/tasks`, `/done`, `/report`, `/review`, `/approve`, `/dismiss`, `/warn`, `/finalwarn`, and `/admin`. The Python prototype has additional completion-review and warning-destination commands that are not yet mirrored in the Worker.
-
-Cloudflare is configured to build this branch from GitHub. The repository includes `wrangler.jsonc` with a KV binding and nightly schedule. Keep `TELEGRAM_BOT_TOKEN`, `WEBHOOK_SECRET`, and `SETUP_KEY` in Cloudflare's encrypted Worker secrets; never commit them or paste them into chat. The setup route first checks Telegram's current webhook and refuses to replace a different webhook. If the webhook is empty, confirm no polling bot is running before registering it.
+The private menu includes Posts, List, Admins, Chats, Saves, and Rules. Manual warnings and admin-approved overdue warnings are posted in the Saves chat (`-3760298679`). The Saves menu's invite button requires the encrypted `SAVES_CHAT_INVITE_URL` secret in Cloudflare; do not commit the group invite link to GitHub. Keep `TELEGRAM_BOT_TOKEN`, `WEBHOOK_SECRET`, and temporary `SETUP_KEY` in Cloudflare's encrypted Worker secrets; never commit them or paste them into chat. Remove `SETUP_KEY` immediately after safely checking or registering the webhook. The setup route refuses to replace a different webhook.
 
 ### Important limitations
 
