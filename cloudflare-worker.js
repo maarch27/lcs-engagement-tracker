@@ -346,7 +346,7 @@ async function listTasks(env, msg) {
   if (!rows.length) return reply(env, msg.replyChatId || msg.chat.id, "You have no open tracked tasks assigned to you 💗");
   const lines = ["📋 Your open tasks (deadlines in UTC):"];
   for (const task of rows) lines.push("Task #" + task.id + " · " + task.instruction + " · posted by " + task.posterName + "\nDue: " + task.dueAt + "\n" + task.url);
-  return adminPrivateReply(env, msg, lines.join("\n\n"));
+  return reply(env, msg.replyChatId || msg.chat.id, lines.join("\n\n"));
 }
 
 async function done(env, msg) {
@@ -413,8 +413,8 @@ async function review(env, msg) {
   const data = await loadChat(env, msg.chat.id);
   const rows = data.reviews.filter(item => item.status === "pending").slice(-30).reverse();
   if (!rows.length) return adminPrivateReply(env, msg, "No overdue tasks are waiting for review 💗");
-  const lines = ["🔎 Pending overdue-task reviews (not confirmed violations):"];
-  for (const item of rows) lines.push("Task #" + item.taskId + " · " + item.userName + " (user ID " + item.userId + ")\n" + item.reason + "\nApprove: /approve " + item.taskId + " " + item.userId + "\nDismiss: /dismiss " + item.taskId + " " + item.userId);
+  const lines = ["🔎 Overdue tasks needing admin review (missing report is not proof of a missed comment):"];
+  for (const item of rows) { const task = data.tasks.find(row => row.id === item.taskId); lines.push("Task #" + item.taskId + " · " + item.userName + " (user ID " + item.userId + ")" + (task ? "\nInstagram post: " + task.url : "") + "\n" + item.reason + "\nApprove: /approve " + item.taskId + " " + item.userId + "\nDismiss: /dismiss " + item.taskId + " " + item.userId); }
   return adminPrivateReply(env, msg, lines.join("\n\n"));
 }
 
@@ -716,9 +716,9 @@ async function handleMenuCallback(query, env) {
   }
 }
 
-function parisLocalTime(date) {
+function tbilisiLocalTime(date) {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Paris", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    timeZone: "Asia/Tbilisi", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).formatToParts(date);
   const value = type => parts.find(part => part.type === type)?.value;
   return { weekday: value("weekday"), hour: Number(value("hour")), minute: Number(value("minute")) };
@@ -726,8 +726,8 @@ function parisLocalTime(date) {
 
 async function nightlyReview(env) {
   const now = new Date();
-  const paris = parisLocalTime(now);
-  if (paris.hour !== 20 || paris.minute !== 0) return;
+  const tbilisi = tbilisiLocalTime(now);
+  if (tbilisi.hour !== 21 || tbilisi.minute !== 0) return;
   let cursor;
   do {
     const page = await env.LCS_DATA.list({ prefix: DB_PREFIX, cursor, limit: 100 });
