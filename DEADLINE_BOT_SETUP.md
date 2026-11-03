@@ -27,6 +27,8 @@ Start with:
 - The review job checks every 15 minutes during 20:00–20:59 Asia/Tbilisi time.
 - Only tasks whose 24-hour deadline has passed are considered.
 - Missing completion reports are placed in the pending queue. This is not proof of a missed Instagram like/save.
+- The bot sends reminders privately only; it does not post individual reminders or nightly missed-task notices in the group.
+- If the overdue target is a Telegram group admin, the private message uses a friendly admin-specific reminder explaining that admins also need to engage with other members' posts.
 - Admins use /review, then /approve TASK_ID USER_ID to confirm a miss and issue the next warning, or /dismiss TASK_ID USER_ID to dismiss it.
 - Admins can issue a manual warning with /warn @username reason or /finalwarn @username reason.
 - Warnings are recorded in the local SQLite database. No automatic ban or post deletion is performed.
@@ -50,7 +52,7 @@ The configured review window is 20:00–21:00 in Georgia. Georgia is ahead of Fr
 
 ## Private reminders
 
-When a task assignment reaches its 24-hour deadline without a completion report, the bot sends the member a private reminder containing the exact Instagram URL, task ID, instructions, and the /done reporting format. It also posts a count to the group and puts the assignment in the admin review queue.
+When a task assignment reaches its 24-hour deadline without a completion report, the bot sends the member a private reminder containing the exact Instagram URL, task ID, instructions, and the /done reporting format. Reminders are private only: it does not post missed-task notices or nightly reminder summaries in the group. The assignment is still placed in the admin review queue.
 
 Telegram bots cannot initiate a private conversation with a member who has never opened the bot. Each member should open the bot's profile and press Start once to enable private reminders. If that member has not started the bot, the bot records that the private message could not be delivered; admins can still see the task in /review.
 
