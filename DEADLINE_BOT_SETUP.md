@@ -46,3 +46,12 @@ The configured review window is 20:00–21:00 in Georgia. Georgia is ahead of Fr
 3. Test a task with an artificially shortened deadline in a test copy before waiting 24 hours.
 4. Confirm the group roster and persistent database behavior.
 5. Only after successful testing, decide whether to merge this branch and migrate the live bot.
+
+
+## Private reminders
+
+When a task assignment reaches its 24-hour deadline without a completion report, the bot sends the member a private reminder containing the exact Instagram URL, task ID, instructions, and the /done reporting format. It also posts a count to the group and puts the assignment in the admin review queue.
+
+Telegram bots cannot initiate a private conversation with a member who has never opened the bot. Each member should open the bot's profile and press Start once to enable private reminders. If that member has not started the bot, the bot records that the private message could not be delivered; admins can still see the task in /review.
+
+These reminders are based on missing completion reports, not direct proof that an Instagram like/save was skipped. The bot cannot read arbitrary Instagram users' likes and saves.
