@@ -223,18 +223,18 @@ async function sendEngagementReminders(env, now = new Date()) {
   if (!notices.length) return;
   const chunks = [];
   for (const {task, threshold} of notices) {
-    chunks.push(threshold.label + "\\nTask #" + task.id + " · Posted by " + task.posterName + "\\n" + task.url + "\\nPlease open the private bot via /posts and finish the comment, like, and save reports. Deadline: " + formatGeorgian(task.deadline) + ".");
+    chunks.push(threshold.label + "\nTask #" + task.id + " · Posted by " + task.posterName + "\n" + task.url + "\nPlease open the private bot via /posts and finish the comment, like, and save reports. Deadline: " + formatGeorgian(task.deadline) + ".");
   }
   // Aggregate reminders into one message per hourly run to avoid flooding a busy 24/7 group.
-  const header = "💗 STAR LINKS ENGAGEMENT CHECK-IN\\nPlease complete every assigned post within 24 hours. Use the Posts button to open your private task list. Your comment report and like/save confirmation are self-reported and may be reviewed by admins.\\n\\n";
+  const header = "💗 STAR LINKS ENGAGEMENT CHECK-IN\nPlease complete every assigned post within 24 hours. Use the Posts button to open your private task list. Your comment report and like/save confirmation are self-reported and may be reviewed by admins.\n\n";
   const maxLen = 3500;
   let message = header;
   for (const item of chunks) {
-    if ((message + item + "\\n\\n").length > maxLen) {
+    if ((message + item + "\n\n").length > maxLen) {
       await reply(env, env.LINK_CHAT_ID, message.trim());
-      message = "💗 STAR LINKS REMINDER (continued)\\n\\n";
+      message = "💗 STAR LINKS REMINDER (continued)\n\n";
     }
-    message += item + "\\n\\n";
+    message += item + "\n\n";
   }
   if (message.trim() !== header.trim()) await reply(env, env.LINK_CHAT_ID, message.trim());
 }
@@ -287,7 +287,7 @@ async function handleUpdate(update, env) {
   const deepStart = chat.type === "private" ? text.match(/^\/start(?:@\w+)?(?:\s+(post|posts|members|admins|rules|warnings|chat|saves))?(?:\s|$)/i) : null;
   if (deepStart && deepStart[1]) {
     const section = deepStart[1].toLowerCase();
-    if (section === "post") {\n      await saveGlobal(env, "postDraft:" + user.id, { state: "awaiting_link", at: dateNow() });\n      return reply(env, chatId, "📸 SUBMIT YOUR INSTAGRAM POST\\n\\nSend your Instagram post or Reel link here privately. Add any special comment instructions after the link (optional).\\n\\nThe bot checks your 24-hour posting eligibility and queues your post for admin review. Review usually takes around 3–5 minutes, but approval is not automatic.");\n    }\n    if (section === "posts") {
+    if (section === "post") {\n      await saveGlobal(env, "postDraft:" + user.id, { state: "awaiting_link", at: dateNow() });\n      return reply(env, chatId, "📸 SUBMIT YOUR INSTAGRAM POST\n\nSend your Instagram post or Reel link here privately. Add any special comment instructions after the link (optional).\n\nThe bot checks your 24-hour posting eligibility and queues your post for admin review. Review usually takes around 3–5 minutes, but approval is not automatic.");\n    }\n    if (section === "posts") {
       if (!env.LINK_CHAT_ID) return reply(env, chatId, "⚠️ The Posts menu is not connected yet. The bot admin needs to configure LINK_CHAT_ID in Cloudflare.");
       const data = await load(env, env.LINK_CHAT_ID);
       const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
@@ -314,11 +314,11 @@ async function handleUpdate(update, env) {
     if (section === "members") {
       const profiles = await loadGlobal(env, "memberProfiles", []);
       return reply(env, chatId, profiles.length
-        ? "👥 STAR LINKS COMMUNITY — INSTAGRAM PROFILES\\n\\n" + profiles.slice(-100).reverse().map(p => (p.name || p.username || "Member") + "\\n" + p.url).join("\\n\\n") + "\\n\\nAdd or update your profile with /profile followed by your Instagram profile URL."
-        : "👥 COMMUNITY INSTAGRAM DIRECTORY\\n\\nNo Instagram profiles have been registered yet. Add yours with:\\n/profile https://www.instagram.com/yourusername/\\n\\nMembers can then discover and follow each other.");
+        ? "👥 STAR LINKS COMMUNITY — INSTAGRAM PROFILES\n\n" + profiles.slice(-100).reverse().map(p => (p.name || p.username || "Member") + "\n" + p.url).join("\n\n") + "\n\nAdd or update your profile with /profile followed by your Instagram profile URL."
+        : "👥 COMMUNITY INSTAGRAM DIRECTORY\n\nNo Instagram profiles have been registered yet. Add yours with:\n/profile https://www.instagram.com/yourusername/\n\nMembers can then discover and follow each other.");
     }
     const members = (data.participants || []).slice(-100).reverse();
-    return reply(env, chatId, members.length ? "👥 MEMBERS SEEN BY THE BOT\\n\\n" + members.map(p => p.username ? "@" + p.username.replace(/^@/, "") : p.name).join("\\n") : "👥 No members have been recorded yet.");
+    return reply(env, chatId, members.length ? "👥 MEMBERS SEEN BY THE BOT\n\n" + members.map(p => p.username ? "@" + p.username.replace(/^@/, "") : p.name).join("\n") : "👥 No members have been recorded yet.");
   }
   if (text.startsWith("/start") || text.startsWith("/help") || text.startsWith("/menu")) {
     if (chat.type === "private") {
@@ -337,7 +337,7 @@ async function handleUpdate(update, env) {
       ];
       return telegram(env, "sendMessage", {
         chat_id: chatId,
-        text: "💗 STAR LINKS\\n\\nChoose a section below.\\n\\n📸 Post — submit your Instagram link privately.\\n📋 Posts — assigned engagement links and deadlines.\\n👥 Members — community Instagram profile directory.\\n👩🏻‍💼 Admin — contact moderators.\\n💾 Saves & Warnings — weekly evidence and reports.\\n📜 Rules — community guidelines.",
+        text: "💗 STAR LINKS\n\nChoose a section below.\n\n📸 Post — submit your Instagram link privately.\n📋 Posts — assigned engagement links and deadlines.\n👥 Members — community Instagram profile directory.\n👩🏻‍💼 Admin — contact moderators.\n💾 Saves & Warnings — weekly evidence and reports.\n📜 Rules — community guidelines.",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: privateMenu }
       });
@@ -345,7 +345,7 @@ async function handleUpdate(update, env) {
     if (savesChat(env, chatId)) return reply(env, chatId, "📸 STAR SAVES — WEEKLY EVIDENCE CHAT\n\nPost the Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\n🗓️ Open: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time. The bot will remind members during the window and send a weekly report to the admin Warnings chat.\n\nUse #WARNING with a member username or reply to their message to flag an issue for admin review. Use #IMBACK when returning and then catch up on outstanding Posts in the private bot. Tags are recorded for review; they do not automatically issue warnings.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
-    const menuText = "💗 STAR LINKS\\n\\nChoose a section below.\\n\\n📸 Post: submit your Instagram link privately for review.\\n📋 Posts: assigned engagement links and deadlines.\\n👥 Members: community Instagram profile directory.\\n👩🏻‍💼 Admin: moderator contacts.\\n💾 Saves & Warnings: weekly evidence and reports.\\n📜 Rules: community guidelines.";
+    const menuText = "💗 STAR LINKS\n\nChoose a section below.\n\n📸 Post: submit your Instagram link privately for review.\n📋 Posts: assigned engagement links and deadlines.\n👥 Members: community Instagram profile directory.\n👩🏻‍💼 Admin: moderator contacts.\n💾 Saves & Warnings: weekly evidence and reports.\n📜 Rules: community guidelines.";
     if (botUsername && String(chatId) === String(env.LINK_CHAT_ID)) {
       const botUrl = "https://t.me/" + botUsername;
       const rows = [
@@ -478,7 +478,7 @@ async function handleUpdate(update, env) {
     await save(env, dataChatId, data);
     const botUsername = await loadGlobal(env, "botUsername", "");
     const botUrl = botUsername ? "https://t.me/" + botUsername : "";
-    const postText = "🔥 STAR LINKS — NEW INSTAGRAM POST\\n\\n👤 Shared by: " + task.posterName + "\\n📸 " + task.url + "\\n📝 Instructions: " + (task.instructionText || (task.instruction === "EMOJI_ONLY" ? "Emoji-only comment" : task.instruction === "ALL + REPOST TO X" ? "Like, save, comment and repost to X" : task.instruction === "ALL + REPOST" ? "Like, save, comment and repost" : "Like, save and leave a meaningful, relevant comment")) + "\\n\\n⏳ Complete within 24 hours.\\nTask ID: #" + task.id + "\\n\\nAfter engaging, open Posts in the bot to report your comment and confirm your like/save.";
+    const postText = "🔥 STAR LINKS — NEW INSTAGRAM POST\n\n👤 Shared by: " + task.posterName + "\n📸 " + task.url + "\n📝 Instructions: " + (task.instructionText || (task.instruction === "EMOJI_ONLY" ? "Emoji-only comment" : task.instruction === "ALL + REPOST TO X" ? "Like, save, comment and repost to X" : task.instruction === "ALL + REPOST" ? "Like, save, comment and repost" : "Like, save and leave a meaningful, relevant comment")) + "\n\n⏳ Complete within 24 hours.\nTask ID: #" + task.id + "\n\nAfter engaging, open Posts in the bot to report your comment and confirm your like/save.";
     const rows = botUsername ? [
       [{ text: "📸 Post", url: botUrl + "?start=post" }, { text: "📋 Posts", url: botUrl + "?start=posts" }],
       [{ text: "👥 Members", url: botUrl + "?start=members" }, { text: "👩🏻‍💼 Admin", url: botUrl + "?start=admins" }],
@@ -708,8 +708,8 @@ async function handleUpdate(update, env) {
       data.tasks.push({ id, chatId: env.LINK_CHAT_ID, messageId: null, url: postLink, instruction, instructionText, posterId: user.id, posterName: displayUser(user), at: createdAt, cycle: georgianCycle(new Date(createdAt)), deadline, status: "pending_review" });
       await save(env, env.LINK_CHAT_ID, data);
       await saveGlobal(env, "postDraft:" + user.id, null);
-      if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "🕵️ NEW POST AWAITING REVIEW\\nMember: " + displayUser(user) + " (ID " + user.id + ")\\nTask: #" + id + "\\n" + postLink + (instructionText ? "\\nInstructions: " + instructionText : "") + "\\nReview with /reviewposts, then /approve " + id + " or /reject " + id + " | reason.");
-      return reply(env, chatId, "✅ Your Instagram post was submitted privately for review.\\n\\n📸 " + postLink + "\\nTask ID: #" + id + "\\nInstructions: " + (instructionText || "Standard engagement: like, save and leave a meaningful relevant comment.") + "\\n\\n⏳ Review estimate: 3–5 minutes. This is not automatic verification; an admin must approve the post before it appears in the Links group.\\n\\nYou may submit another post after: " + formatGeorgian(deadline));
+      if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "🕵️ NEW POST AWAITING REVIEW\nMember: " + displayUser(user) + " (ID " + user.id + ")\nTask: #" + id + "\n" + postLink + (instructionText ? "\nInstructions: " + instructionText : "") + "\nReview with /reviewposts, then /approve " + id + " or /reject " + id + " | reason.");
+      return reply(env, chatId, "✅ Your Instagram post was submitted privately for review.\n\n📸 " + postLink + "\nTask ID: #" + id + "\nInstructions: " + (instructionText || "Standard engagement: like, save and leave a meaningful relevant comment.") + "\n\n⏳ Review estimate: 3–5 minutes. This is not automatic verification; an admin must approve the post before it appears in the Links group.\n\nYou may submit another post after: " + formatGeorgian(deadline));
     }
   }
   if (!["group", "supergroup"].includes(chat.type)) return;
