@@ -125,15 +125,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(
-        "💗 LCS engagement rules\n"
-        "1. Engage with links shared in this Telegram group within 24 hours of the link being posted.\n"
-        "2. Like and save the Instagram post and leave a relevant comment.\n"
-        "3. Unless the post says otherwise, comments should contain at least 3 meaningful words.\n"
-        "4. Follow specific instructions, including exact emoji requests.\n"
-        "5. Report with /done TASK_ID | the comment you left. This is a self-report, not proof of likes/saves.\n"
-        "6. Overdue tasks are queued for admin review; warnings and serious penalties are not automatic."
-    )
+    """Send the complete Star Links rules and supplied Instagram roster privately."""
+    full_rules = "❗️CHAT RULES — PLEASE READ CAREFULLY (RULES HAVE BEEN UPDATED!)\n\n☑ All members must follow every member of the chat.\n☑ Admins can choose whether or not to complete links.\n☑ Admins are allowed to post up to 2 links/posts.\n☑ Only 1 post/link per 24 hours is allowed.\n☑ You can post any content, whether it is old or new.\n☑ Comments must contain at least 3 words.\n☑ If a post requires ALL, comments must contain at least 3 words. Emoji-only comments are not allowed. When sharing a link, mention what the product is about! Bot-like or generic comments are also prohibited.\n☑ Engagement on all posts must be completed within 24 hours. Activity will be checked daily!\n☑ It does not matter whether you have been inactive and haven’t posted a link for one week or two — you must still complete all outstanding links.\n☑ After joining the chat, you must follow all members within 24 hours. Members’ Instagram links are pinned in the links chat. Other members will follow you back within 24 hours. If someone hasn’t followed you back, tag them in the discussion chat.\n☑ Saves are posted only on Sundays.\n☑ Sunday is our rest day — only saves are allowed to be posted.\n\n‼️ If you do not have your required saves completed within 48 hours, you will be banned from posting links. However, you must continue completing other members’ links.\n‼️ After receiving 3 warnings, you must leave the chat. Admins will notify you in advance.\n‼️ If you are unable to participate in engagement, you must post a numbered warning using #WARNING.\nExample: #WARNING2 I won’t be able to participate in engagement.\nWarnings must be numbered consecutively. A maximum of 2 warnings per month is allowed.\n\n📌 SATURDAY RULE\nOn Saturdays, you may post someone else’s link, but you must clearly label it (Someone else’s link).\nYou are allowed to post only ONE link in total — either your own link or someone else’s.\n\n📌 RETURNING AFTER INACTIVITY\nWhen you become active again, you must write #IMBACK.\nFor any links you missed while you were away, you only need to complete the likes and saves.\n\n📌 TELEGRAM & CHAT ETIQUETTE\n⭕️ Use the same name on Telegram as the one you use on Instagram.\n⭕️ Use the same profile picture on Telegram as the one you use on Instagram.\n⭕️ Do not leave generic or bot-like comments such as:\n• “Wow”\n• “Great”\n• “Cool content”\n• “I love this content”\n• “Great product”\n⭕️ Do not write anything in the Saves Chat except warnings and save links. For general conversations, please use the Discussion Chat or the Star Chat space.\n⭕️ Sharing paid collaboration opportunities is mandatory. If you do not share paid opportunities with the group, you may be required to leave the chat.\n⭕️ You can contact the admins privately at any time if you have questions or concerns.\nThank you for respecting the rules and helping us keep the group fair, active, and supportive for everyone! 💗\n\nADMINS\n1) https://www.instagram.com/maarch_27\n2) https://www.instagram.com/lizalens__\n3) https://www.instagram.com/itsimplymartha\n4) https://www.instagram.com/dr.lamarya\n\nMEMBERS — Instagram links\n5) https://www.instagram.com/meksssun/\n6) https://www.instagram.com/ugc.tako\n7) https://www.instagram.com/mariamkha.ugc\n8) https://www.instagram.com/niiinuciii\n9) https://www.instagram.com/sergeevaaianaaa\n10) https://www.instagram.com/marishkkan\n11) https://www.instagram.com/tamu__bb\n12) https://www.instagram.com/by.marsho\n13) https://www.instagram.com/sallom_ee\n15) https://www.instagram.com/aniardazishvili\n16) https://www.instagram.com/tata.papiashvili\n17) https://www.instagram.com/kokhre.salluka\n18) https://www.instagram.com/ugcwithgvantsi\n19) https://www.instagram.com/ddzuguu\n20) https://www.instagram.com/sesilia_tr\n21) https://www.instagram.com/ugcketi_\n22) https://www.instagram.com/marisa_ugccreator\n23) https://www.instagram.com/ildas.way\n24) https://www.instagram.com/khatia.chargazia\n25) https://www.instagram.com/teo.createss_\n26) https://www.instagram.com/lana_span\n27) https://www.instagram.com/manoni_ugc\n28) https://www.instagram.com/ninuca.ugc\n29) https://www.instagram.com/tati.mtskerashvili\n30) https://www.instagram.com/taks_ugc\n31) https://www.instagram.com/nina_zarnadze\n32) https://www.instagram.com/marlen__music\n34) https://www.instagram.com/teona.kurtanidze\n35) https://www.instagram.com/__lilluuu\n36) https://www.instagram.com/tamaras_style\n37) https://www.instagram.com/teokekos_\n38) https://www.instagram.com/merriem3.14\n39) https://www.instagram.com/bbetheaa\n40) https://www.instagram.com/itsjeni1212\n41) https://www.instagram.com/sallyna___\n42) https://www.instagram.com/ugc_eka\n43) https://www.instagram.com/tamarcreates\n44) https://www.instagram.com/mariam_giorgashvili\n\nBlank entries 14, 33 and 45 were omitted. The bot cannot automatically verify Instagram follows."
+    chat = update.effective_chat
+    if chat and chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+        try:
+            await context.bot.send_message(chat_id=update.effective_user.id, text=full_rules)
+            await update.effective_message.reply_text("💗 I’ve sent the full rules and member Instagram list privately. If you don’t receive a DM, open @LCS_Engagement_Tracker_bot and press Start, then try /rules again.")
+        except Exception:
+            await update.effective_message.reply_text("I couldn’t DM you yet. Please open @LCS_Engagement_Tracker_bot, press Start, then use /rules again.")
+    else:
+        await update.effective_message.reply_text(full_rules)
+
+
+async def members_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text("💗 The full member Instagram list is included at the end of /rules. Use /rules to receive the rules and list privately. Follow status is not automatically verified.")
 
 
 async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -569,7 +575,8 @@ async def post_init(application: Application):
     await application.bot.set_my_commands([
         ("start", "Start the tracker"),
         ("help", "Show bot help"),
-        ("rules", "Get the full group rules"),
+        ("rules", "Get full rules and member Instagram list"),
+        ("members", "View member Instagram list"),
         ("tasks", "List your open tasks"),
         ("done", "Report a completed task"),
         ("report", "Show the tracker report (admin)"),
@@ -595,6 +602,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", start))
     app.add_handler(CommandHandler("rules", rules))
+    app.add_handler(CommandHandler("members", members_list))
     app.add_handler(CommandHandler("tasks", tasks))
     app.add_handler(CommandHandler("done", done))
     app.add_handler(CommandHandler("review_done", review_done))
