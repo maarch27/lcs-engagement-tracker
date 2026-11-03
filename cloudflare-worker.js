@@ -58,6 +58,29 @@ async function save(env, chatId, data) {
 }
 function nameOf(user) { return user.username ? "@" + user.username : (user.first_name || "member"); }
 function dateNow() { return new Date().toISOString(); }
+function tbilisiParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type, Number(p.value)]));
+}
+function georgianCycle(date = new Date()) {
+  const p = tbilisiParts(date);
+  const start = new Date(Date.UTC(p.year, p.month - 1, p.day, 0, 0, 0));
+  // Cycle labels use the Georgian calendar date on which the 21:00 cycle began.
+  if (p.hour < 21) start.setUTCDate(start.getUTCDate() - 1);
+  return start.toISOString().slice(0, 10);
+}
+function nextGeorgianDeadline(date = new Date()) {
+  const p = tbilisiParts(date);
+  // Georgia is UTC+4. Deadline is the next 21:00 Asia/Tbilisi cutoff.
+  const localMidnightUtc = Date.UTC(p.year, p.month - 1, p.day, 0, 0, 0);
+  const todayCutoff = localMidnightUtc + (21 - 4) * 60 * 60 * 1000;
+  const candidate = new Date(todayCutoff);
+  if (date.getTime() >= todayCutoff) candidate.setTime(todayCutoff + 24 * 60 * 60 * 1000);
+  return candidate.toISOString();
+}
+function formatGeorgian(dateString) {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(dateString)) + " Georgia time";
+}
 
 async function handleUpdate(update, env) {
   const msg = update.message || update.edited_message;
@@ -129,12 +152,16 @@ async function handleUpdate(update, env) {
   for (const link of links) {
     const clean = link.replace(/[.,!?\)\]\}]+$/g, "");
     const id = data.nextId++;
-    data.tasks.push({ id, chatId, messageId: msg.message_id, url: clean, instruction, posterId: user.id, posterName: nameOf(user), at: dateNow() });
+    const createdAt = dateNow();
+    const deadline = nextGeorgianDeadline(new Date(createdAt));
+    data.tasks.push({ id, chatId, messageId: msg.message_id, url: clean, instruction, posterId: user.id, posterName: nameOf(user), at: createdAt, cycle: georgianCycle(new Date(createdAt)), deadline });
     ids.push("#" + id);
   }
   await save(env, chatId, data);
   const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id));
-  let note = `📌 Instagram task created: ${ids.join(", ")}\nInstruction: ${instruction}\nPlease like + save and leave a genuine, relevant comment.\nWhen done, report: /done TASK_ID | your comment`;
-  if (open.length) note += `\n⚠️ Reminder: you have ${open.length} earlier task(s) still unreported. This is a reminder, not proof that engagement was skipped.`;
-  await reply(env, chatId, note, msg.message_id);
+  const latestTask = data.tasks.find(t => t.id === Number(ids[0].slice(1)));
+  const note = `💗 Thank you ${nameOf(user)} for sharing your Instagram post!\n\n✅ Your post has been added to the LCS Engagement Tracker.\n📌 Task ID: ${ids.join(", ")}\n⏳ Daily engagement deadline: ${formatGeorgian(latestTask.deadline)}\n\n💗 Please make sure to engage with the other posts in this cycle: like + save and leave the requested, meaningful comment (3+ words unless the post says otherwise).\n\nUse /tasks to review outstanding tasks. Report completion in the group with /done TASK_ID | your comment.\n\nℹ️ The bot records self-reports; it cannot independently verify Instagram likes or saves.`;
+  // Send this confirmation privately to the person who shared the link. Never post the notification in the group.
+  const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
+  if (!dm.ok) console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
 }
