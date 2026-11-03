@@ -291,8 +291,19 @@ async function handleUpdate(update, env) {
       if (!env.LINK_CHAT_ID) return reply(env, chatId, "⚠️ The Posts menu is not connected yet. The bot admin needs to configure LINK_CHAT_ID in Cloudflare.");
       const data = await load(env, env.LINK_CHAT_ID);
       const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
-      const body = ownOpen.map(t => "#" + t.id + " · Posted by " + t.posterName + "\nStatus: " + (t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE" : "⏳ Awaiting your report") + "\nDeadline: " + (t.deadline ? formatGeorgian(t.deadline) : "Ask an admin") + "\n" + t.url + "\n\nReport your comment: /done " + t.id + " | your comment\nAfter liking and saving: /confirm " + t.id).join("\n\n");
-      return reply(env, chatId, body ? "📋 POSTS YOU NEED TO ENGAGE WITH\n\n" + body : "💗 You have no open posts to engage with right now.");
+      const nowMs = Date.now();
+      const timeLeft = (deadline) => {
+        if (!deadline) return "time not set";
+        const diff = new Date(deadline).getTime() - nowMs;
+        if (diff <= 0) return "⚠️ overdue";
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        if (hours >= 24) return Math.floor(hours / 24) + "d " + (hours % 24) + "h left";
+        if (hours > 0) return hours + "h " + minutes + "m left";
+        return minutes + "m left";
+      };
+      const body = ownOpen.map((t, i) => (i + 1) + ") " + t.url + "\n   ⏳ " + timeLeft(t.deadline) + " · ID #" + t.id + "\n   Comment report: /done " + t.id + " | your comment\n   After liking + saving: /confirm " + t.id).join("\n\n");
+      return reply(env, chatId, body ? "📋 YOUR OPEN POSTS\nOne compact list — complete each post within its deadline.\n\n" + body : "💗 You have no open posts to engage with right now.");
     }
     if (!env.LINK_CHAT_ID) return reply(env, chatId, "⚠️ This menu is not connected yet. The bot admin needs to configure LINK_CHAT_ID in Cloudflare.");
     const data = await load(env, env.LINK_CHAT_ID);
