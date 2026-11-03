@@ -324,8 +324,20 @@ async function handleUpdate(update, env) {
     if (chat.type === "private") {
       const normalizedUsername = (user.username || "").replace(/^@/, "").toLowerCase();
       if (TRUSTED_ADMIN_USERNAMES.has(normalizedUsername)) {
-        return reply(env, chatId,
-          "🛠 STAR LINKS ADMIN PANEL\n\nWelcome, admin. Use these commands to manage the community.\n\n/admin to reopen this admin menu\n/report for today's task summary\n/tracked to receive the latest tracked posts privately\n/check TASK_ID to check task reports\n/warnings to review monthly warnings\n/warn USER_ID | reason to issue a warning\n/reviewposts to list pending post submissions\n/approve TASK_ID to publish an approved submission\n/reject TASK_ID | reason to reject a submission\n/approvepost USER_ID to approve an early post\n/evidence to review Saves submissions\n/flags to review flagged comments\n\nThe bot records self-reports and cannot independently verify Instagram likes or saves. No automatic bans or message deletions are applied.");
+        const botUsername = await loadGlobal(env, "botUsername", "");
+        const botUrl = botUsername ? "https://t.me/" + botUsername : "";
+        const adminRows = [
+          [{ text: "📸 Post", url: botUrl + "?start=post" }, { text: "📋 Posts", url: botUrl + "?start=posts" }],
+          [{ text: "👥 Members", url: botUrl + "?start=members" }, { text: "👩🏻‍💼 Admin", url: botUrl + "?start=admins" }],
+          [{ text: "💾 Saves & ⚠️ Warnings", url: "https://t.me/+zvH-bkE_ZT45NTli" }],
+          [{ text: "📜 Rules", url: botUrl + "?start=rules" }]
+        ];
+        return telegram(env, "sendMessage", {
+          chat_id: chatId,
+          text: "🛠 STAR LINKS ADMIN PANEL\\n\\n/admin — reopen admin controls\\n/report — daily task summary\\n/tracked — latest tracked posts privately\\n/check TASK_ID — task reports\\n/warnings — monthly warning summary\\n/warn USER_ID | reason — issue a warning\\n/reviewposts — pending submissions\\n/approve TASK_ID — publish an approved submission\\n/reject TASK_ID | reason — reject a submission\\n/evidence — review Saves submissions\\n/flags — review flagged comments\\n\\nUse the menu below to navigate the community sections.",
+          disable_web_page_preview: true,
+          reply_markup: { inline_keyboard: adminRows }
+        });
       }
       const botUsername = await loadGlobal(env, "botUsername", "");
       const botUrl = botUsername ? "https://t.me/" + botUsername : "";
