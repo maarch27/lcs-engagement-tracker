@@ -3,6 +3,9 @@ const TRUSTED_ADMIN_USERNAMES = new Set(["marriaammi", "lizal", "itsimplymartha"
 const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 
 export default {
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(sendWeeklyEvidenceReport(env, controller.scheduledTime ? new Date(controller.scheduledTime) : new Date()));
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/setup") {
@@ -101,6 +104,36 @@ function formatGeorgian(dateString) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(dateString)) + " Georgia time";
 }
 
+function georgianDateKey(date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+async function sendWeeklyEvidenceReport(env, scheduledTime = new Date()) {
+  if (!env.WARNING_CHAT_ID || !env.SAVES_CHAT_ID || !env.LCS_DATA) {
+    console.error("Weekly evidence report skipped: configure WARNING_CHAT_ID, SAVES_CHAT_ID and LCS_DATA.");
+    return;
+  }
+  // Cloudflare cron 0 20 * * SUN runs at Monday 00:00 in Georgia (UTC+4).
+  const localParts = tbilisiParts(scheduledTime);
+  const previousDay = new Date(Date.UTC(localParts.year, localParts.month - 1, localParts.day) - 24 * 60 * 60 * 1000);
+  const sundayKey = georgianDateKey(previousDay);
+  const evidence = await loadGlobal(env, "evidence", []);
+  const windowEvidence = evidence.filter(e => String(e.chatId) === String(env.SAVES_CHAT_ID) && georgianDateKey(new Date(e.at)) === sundayKey);
+  const roster = await load(env, env.SAVES_CHAT_ID);
+  const byMember = new Map();
+  for (const item of windowEvidence) {
+    const key = String(item.userId);
+    const current = byMember.get(key) || { name: item.name || key, count: 0, types: new Set() };
+    current.count++;
+    current.types.add(item.type || "evidence");
+    byMember.set(key, current);
+  }
+  const observed = roster.participants || [];
+  const missing = observed.filter(p => !byMember.has(String(p.userId)));
+  const submissions = [...byMember.entries()].sort((a,b) => b[1].count-a[1].count).map(([id, v]) => `• ${v.name} (ID ${id}): ${v.count} submission(s) — ${[...v.types].join(", ")}`);
+  const missingText = missing.length ? missing.map(p => `• ${p.name} (ID ${p.userId})`).join("\\n") : "No known Saves-chat participants were missing submissions.";
+  const report = `📊 WEEKLY SAVES EVIDENCE REPORT\\nEvidence window: Sunday 00:00–23:59 Georgia time (${sundayKey})\\nReport generated: Monday 00:00 Georgia time\\n\\nSubmissions: ${windowEvidence.length}\\nMembers who submitted: ${byMember.size}\\nKnown Saves-chat participants without a submission: ${missing.length}\\n\\n📸 SUBMISSIONS\\n${submissions.length ? submissions.join("\\n") : "No evidence submissions were recorded during the window."}\\n\\n⚠️ NO SUBMISSION RECORDED\\n${missingText}\\n\\nAdmin review required: this report only includes members the bot has observed in the Saves chat. Missing evidence is not an automatic warning, and the bot cannot independently verify Instagram likes/saves.`;
+  await reply(env, env.WARNING_CHAT_ID, report);
+}
 async function handleUpdate(update, env) {
   const msg = update.message || update.edited_message;
   if (!msg || !msg.chat) return;
@@ -119,8 +152,10 @@ async function handleUpdate(update, env) {
     }
   }
   if (text.startsWith("/start") || text.startsWith("/help")) {
+    if (savesChat(env, chatId)) return reply(env, chatId, "📸 SAVES — Weekly Evidence Chat\\n\\nPost Instagram links you engaged with and upload screenshots or screen recordings as evidence. Keep submissions in this chat so admins can review them.\\n\\nThe evidence window opens Sunday at 00:00 and closes Monday at 00:00 Georgia time.\\n/evidence — admins: review recent submissions\\n/review — admins: review recent submissions\\n/warnings — admins: view warning summary");
+    if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — Admin Desk\\n\\nThis chat receives warning alerts and the weekly Saves evidence report.\\n/warnings — monthly warning summary\\n/warn USER_ID | reason — issue a warning\\n/evidence — review evidence submissions\\n/review — review evidence submissions\\n\\nWeekly report is sent after the Sunday evidence window closes at 00:00 Monday Georgia time.");
     return reply(env, chatId,
-      "💗 Welcome to Star Links — Daily Engagement!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view engagement tasks\n/rules — community rules\n/done TASK_ID | your comment — report your comment\n/confirm TASK_ID — confirm you liked and saved the post\n/warnings — view your current-month warning count\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n/tracked — privately view tracked posts (admins)\n/warnings — view warning summary (admins)\n/warn USER_ID | reason — issue a warning (admins)\n/approvepost USER_ID — approve one early post (admins)\n/evidence — list recent submitted evidence (admins)\n/check TASK_ID — list known members missing reports (admins)\n\n📸 SAVES CHAT\nSend screenshots or screen recordings as evidence. Admins can use /warnings, /warn, /evidence and /review.\n\n💌 NEED HELP?\nContact @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nThe bot never deletes messages or auto-bans members. Instagram likes/saves cannot be verified directly by the bot. 💗");
+      "💗 Welcome to Star Links — Daily Engagement!\\n\\nLet’s support each other and grow together ✨\\n\\n👥 MEMBERS\\n/tasks — view engagement tasks\\n/rules — community rules\\n/done TASK_ID | your comment — report your comment\\n/confirm TASK_ID — confirm you liked and saved the post\\n/warnings — view your current-month warning count\\n\\n🛠 ADMINS\\n/admin — admin controls\\n/report — daily activity report\\n/flags — review flagged reports\\n/tracked — privately view tracked posts (admins)\\n/warnings — view warning summary (admins)\\n/warn USER_ID | reason — issue a warning (admins)\\n/approvepost USER_ID — approve one early post (admins)\\n/evidence — list recent submitted evidence (admins)\\n/check TASK_ID — list known members missing reports (admins)\\n\\n📸 SAVES CHAT\\nSend screenshots or screen recordings as evidence. Admins can use /warnings, /warn, /evidence and /review.\\n\\n💌 NEED HELP?\\nContact @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\\n\\nThe bot never deletes messages or auto-bans members. Instagram likes/saves cannot be verified directly by the bot. 💗");
   }
   if (text.startsWith("/rules")) {
     return reply(env, chatId,
@@ -210,6 +245,8 @@ async function handleUpdate(update, env) {
       limits[String(target.id)] = { untilMonth: monthKey(), reason: "Reached 5 warnings in one calendar month", at: dateNow() };
       await saveGlobal(env, "limits", limits);
     }
+    const alert = `⚠️ STAR LINKS WARNING RECORDED\\nMember: ${warning.name} (ID ${target.id})\\nWarnings this month: ${count}/5\\nReason: ${warning.reason}\\nIssued by: ${warning.adminName}${limitActive ? "\\nPOSTING LIMIT ACTIVE until next month (no ban)." : ""}`;
+    if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, alert);
     return reply(env, chatId, `‼️ Warning ${count}/5 recorded for ${warning.name} (ID ${target.id}).${limitActive ? " Posting limit activated until next month; no ban applied." : ""}`);
   }
   if (text.startsWith("/approvepost")) {
@@ -226,6 +263,18 @@ async function handleUpdate(update, env) {
     const evidence = await loadGlobal(env, "evidence", []);
     const rows = evidence.slice(-15).reverse();
     return reply(env, chatId, rows.length ? "📸 Recent evidence submissions (manual review)\n\n" + rows.map(e => `Evidence #${e.id} · ${e.name} (ID ${e.userId})\nType: ${e.type} · ${e.at}\n${e.caption || "No caption"}${e.fileId ? "\nTelegram file ID saved" : ""}`).join("\n\n") : "No evidence submissions recorded yet.");
+  }
+  // Saves chat is an evidence-only room: record Instagram links as evidence, never as engagement tasks.
+  if (savesChat(env, chatId) && IG_RE.test(text)) {
+    IG_RE.lastIndex = 0;
+    const links = text.match(IG_RE) || [];
+    const evidence = await loadGlobal(env, "evidence", []);
+    for (const rawLink of links) {
+      const link = rawLink.replace(/[.,!?]+$/g, "");
+      evidence.push({ id: evidence.length ? Math.max(...evidence.map(e => e.id || 0)) + 1 : 1, userId: user.id, name: nameOf(user), chatId, type: "Instagram link", url: link, caption: text.slice(0,300), messageId: msg.message_id, at: dateNow(), status: "pending_review" });
+    }
+    await saveGlobal(env, "evidence", evidence);
+    return;
   }
   // Save-chat evidence mode: record incoming images/videos/documents without cluttering the chat with bot replies.
   if (savesChat(env, chatId) && (msg.photo || msg.video || msg.document || msg.animation || msg.video_note)) {
