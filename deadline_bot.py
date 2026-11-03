@@ -567,10 +567,20 @@ async def nightly_review(context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(application: Application):
     await application.bot.set_my_commands([
-        ("start", "Start tracker"), ("rules", "Show rules"), ("tasks", "List your open tasks"),
-        ("done", "Report completion"), ("report", "Admin report"), ("review", "Review overdue tasks"),
-        ("review_done", "Review completion comments"), ("edit_done", "Edit a completion comment"),
-        ("admin", "Admin controls"),
+        ("start", "Start the tracker"),
+        ("help", "Show bot help"),
+        ("rules", "Get the full group rules"),
+        ("tasks", "List your open tasks"),
+        ("done", "Report a completed task"),
+        ("report", "Show the tracker report (admin)"),
+        ("review", "Review overdue tasks (admin)"),
+        ("approve", "Approve an overdue-task review (admin)"),
+        ("dismiss", "Dismiss an overdue-task review (admin)"),
+        ("warn", "Issue a private warning (admin)"),
+        ("finalwarn", "Issue a final warning (admin)"),
+        ("review_done", "Review recent completion comments (admin)"),
+        ("edit_done", "Edit a completion comment (admin)"),
+        ("admin", "Show admin commands"),
     ])
     # Check every 15 minutes; only perform review during 20:00–20:59 in Georgia.
     application.job_queue.run_repeating(nightly_review, interval=900, first=15, name="georgia_nightly_review")
