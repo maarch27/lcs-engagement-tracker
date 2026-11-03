@@ -363,12 +363,12 @@ async function handleUpdate(update, env) {
     const data = await load(env, taskChatIdFor(chat, env));
     const pending = data.tasks.filter(t => t.status === "pending_review").slice(-20).reverse();
     return reply(env, chatId, pending.length
-      ? "🕵️ POSTS WAITING FOR REVIEW\\n\\n" + pending.map(t => "Task #" + t.id + " · " + t.posterName + " (ID " + t.posterId + ")\\n" + t.url + "\\nApprove: /approve " + t.id + "\\nReject: /reject " + t.id + " | reason").join("\\n\\n")
+      ? "🕵️ POSTS WAITING FOR REVIEW\n\n" + pending.map(t => "Task #" + t.id + " · " + t.posterName + " (ID " + t.posterId + ")\n" + t.url + "\nApprove: /approve " + t.id + "\nReject: /reject " + t.id + " | reason").join("\n\n")
       : "💗 There are no posts waiting for review.");
   }
   if (text.startsWith("/approve ") || text === "/approve") {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can approve posts.");
-    const match = text.match(/^\\/approve(?:@\\w+)?\\s+(\\d+)$/);
+    const match = text.match(/^\/approve(?:@\w+)?\s+(\\d+)$/);
     if (!match) return reply(env, chatId, "Format: /approve TASK_ID");
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
@@ -380,15 +380,15 @@ async function handleUpdate(update, env) {
     task.reviewedBy = user.id;
     await save(env, dataChatId, data);
     const botUsername = await loadGlobal(env, "botUsername", "");
-    const postText = "✅ APPROVED INSTAGRAM POST\\nPosted by: " + task.posterName + "\\nTask ID: #" + task.id + "\\n" + task.url + "\\nPlease engage within 24 hours: like, save, and leave a meaningful comment.";
+    const postText = "✅ APPROVED INSTAGRAM POST\nPosted by: " + task.posterName + "\nTask ID: #" + task.id + "\n" + task.url + "\nPlease engage within 24 hours: like, save, and leave a meaningful comment.";
     const keyboard = botUsername ? { reply_markup: { inline_keyboard: [[{ text: "📋 Open assigned posts", url: "https://t.me/" + botUsername + "?start=posts" }]] } } : {};
     await telegram(env, "sendMessage", { chat_id: task.chatId || dataChatId, text: postText, disable_web_page_preview: true, ...keyboard });
-    await sendPrivate(env, task.posterId, "✅ Your Instagram post has been approved and published in Star Links!\\n\\n" + task.url + "\\nTask ID: #" + task.id + "\\nMembers can now find it in Posts. Please check the bot for updates.");
+    await sendPrivate(env, task.posterId, "✅ Your Instagram post has been approved and published in Star Links!\n\n" + task.url + "\nTask ID: #" + task.id + "\nMembers can now find it in Posts. Please check the bot for updates.");
     return reply(env, chatId, "✅ Task #" + task.id + " approved and published. The poster was notified privately.");
   }
   if (text.startsWith("/reject ") || text === "/reject") {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can reject posts.");
-    const match = text.match(/^\\/reject(?:@\\w+)?\\s+(\\d+)\\s*\\|\\s*(.+)$/s);
+    const match = text.match(/^\/reject(?:@\w+)?\s+(\\d+)\s*\\|\s*(.+)$/s);
     if (!match) return reply(env, chatId, "Format: /reject TASK_ID | reason");
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
@@ -400,7 +400,7 @@ async function handleUpdate(update, env) {
     task.reviewedBy = user.id;
     task.reviewReason = match[2].trim().slice(0,300);
     await save(env, dataChatId, data);
-    await sendPrivate(env, task.posterId, "❌ Your Instagram post was not approved.\\nReason: " + task.reviewReason + "\\nYou may correct the issue and submit a valid post link when eligible.");
+    await sendPrivate(env, task.posterId, "❌ Your Instagram post was not approved.\nReason: " + task.reviewReason + "\nYou may correct the issue and submit a valid post link when eligible.");
     return reply(env, chatId, "❌ Task #" + task.id + " rejected. The poster was notified privately.");
   }
   if (text.startsWith("/approvepost")) {
