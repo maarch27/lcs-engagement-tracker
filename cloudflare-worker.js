@@ -40,6 +40,7 @@ export default {
             { command: "tasks", description: "View posts you still need to engage with" },
             { command: "done", description: "Report your comment: /done TASK_ID | comment" },
             { command: "confirm", description: "Confirm you liked and saved a post" },
+            { command: "reviewposts", description: "Admin: review pending post submissions" },
             { command: "warnings", description: "Check your warning count" },
             { command: "rules", description: "Read the engagement rules" },
             { command: "help", description: "Open help and menu" }
@@ -227,7 +228,7 @@ async function handleUpdate(update, env) {
     if (section === "posts") {
       if (!env.LINK_CHAT_ID) return reply(env, chatId, "⚠️ The Posts menu is not connected yet. The bot admin needs to configure LINK_CHAT_ID in Cloudflare.");
       const data = await load(env, env.LINK_CHAT_ID);
-      const ownOpen = data.tasks.filter(t => String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
+      const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
       const body = ownOpen.map(t => "#" + t.id + " · Posted by " + t.posterName + "\nStatus: " + (t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE" : "⏳ Awaiting your report") + "\nDeadline: " + (t.deadline ? formatGeorgian(t.deadline) : "Ask an admin") + "\n" + t.url + "\n\nReport your comment: /done " + t.id + " | your comment\nAfter liking and saving: /confirm " + t.id).join("\n\n");
       return reply(env, chatId, body ? "📋 POSTS YOU NEED TO ENGAGE WITH\n\n" + body : "💗 You have no open posts to engage with right now.");
     }
@@ -243,7 +244,7 @@ async function handleUpdate(update, env) {
       const normalizedUsername = (user.username || "").replace(/^@/, "").toLowerCase();
       if (TRUSTED_ADMIN_USERNAMES.has(normalizedUsername)) {
         return reply(env, chatId,
-          "🛠 STAR LINKS ADMIN PANEL\n\nWelcome, admin. Use these commands to manage the community.\n\n/admin to reopen this admin menu\n/report for today's task summary\n/tracked to receive the latest tracked posts privately\n/check TASK_ID to check task reports\n/warnings to review monthly warnings\n/warn USER_ID | reason to issue a warning\n/approvepost USER_ID to approve an early post\n/evidence to review Saves submissions\n/flags to review flagged comments\n\nThe bot records self-reports and cannot independently verify Instagram likes or saves. No automatic bans or message deletions are applied.");
+          "🛠 STAR LINKS ADMIN PANEL\n\nWelcome, admin. Use these commands to manage the community.\n\n/admin to reopen this admin menu\n/report for today's task summary\n/tracked to receive the latest tracked posts privately\n/check TASK_ID to check task reports\n/warnings to review monthly warnings\n/warn USER_ID | reason to issue a warning\n/reviewposts to list pending post submissions\n/approve TASK_ID to publish an approved submission\n/reject TASK_ID | reason to reject a submission\n/approvepost USER_ID to approve an early post\n/evidence to review Saves submissions\n/flags to review flagged comments\n\nThe bot records self-reports and cannot independently verify Instagram likes or saves. No automatic bans or message deletions are applied.");
       }
       return reply(env, chatId,
         "💗 Welcome to Star Links, our daily Instagram engagement community!\n\nLike and save every Instagram post assigned to you, and leave a meaningful comment of at least three words. Please complete all assigned tasks.\n\nUse /posts to view your assigned posts. Use /done TASK_ID | your comment to report the comment you left, then use /confirm TASK_ID after you have liked and saved the post.\n\n📸 Saves: Share the Instagram links you engaged with, along with screenshots or screen recordings, in the Saves chat while it is open.\n\n⚠️ The bot records your reports, but it cannot independently verify Instagram likes, saves, or comments.\n\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
@@ -357,6 +358,51 @@ async function handleUpdate(update, env) {
     if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, alert);
     return reply(env, chatId, `‼️ Warning ${count}/5 recorded for ${warning.name} (ID ${target.id}).${limitActive ? " Posting limit activated until next month; no ban applied." : ""}`);
   }
+  if (text.startsWith("/reviewposts")) {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can review pending posts.");
+    const data = await load(env, taskChatIdFor(chat, env));
+    const pending = data.tasks.filter(t => t.status === "pending_review").slice(-20).reverse();
+    return reply(env, chatId, pending.length
+      ? "🕵️ POSTS WAITING FOR REVIEW\\n\\n" + pending.map(t => "Task #" + t.id + " · " + t.posterName + " (ID " + t.posterId + ")\\n" + t.url + "\\nApprove: /approve " + t.id + "\\nReject: /reject " + t.id + " | reason").join("\\n\\n")
+      : "💗 There are no posts waiting for review.");
+  }
+  if (text.startsWith("/approve ") || text === "/approve") {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can approve posts.");
+    const match = text.match(/^\\/approve(?:@\\w+)?\\s+(\\d+)$/);
+    if (!match) return reply(env, chatId, "Format: /approve TASK_ID");
+    const dataChatId = taskChatIdFor(chat, env);
+    const data = await load(env, dataChatId);
+    const task = data.tasks.find(t => t.id === Number(match[1]));
+    if (!task) return reply(env, chatId, "I couldn't find that task.");
+    if (task.status !== "pending_review") return reply(env, chatId, "This post is not waiting for review. Current status: " + (task.status || "legacy/active") + ".");
+    task.status = "approved";
+    task.reviewedAt = dateNow();
+    task.reviewedBy = user.id;
+    await save(env, dataChatId, data);
+    const botUsername = await loadGlobal(env, "botUsername", "");
+    const postText = "✅ APPROVED INSTAGRAM POST\\nPosted by: " + task.posterName + "\\nTask ID: #" + task.id + "\\n" + task.url + "\\nPlease engage within 24 hours: like, save, and leave a meaningful comment.";
+    const keyboard = botUsername ? { reply_markup: { inline_keyboard: [[{ text: "📋 Open assigned posts", url: "https://t.me/" + botUsername + "?start=posts" }]] } } : {};
+    await telegram(env, "sendMessage", { chat_id: task.chatId || dataChatId, text: postText, disable_web_page_preview: true, ...keyboard });
+    await sendPrivate(env, task.posterId, "✅ Your Instagram post has been approved and published in Star Links!\\n\\n" + task.url + "\\nTask ID: #" + task.id + "\\nMembers can now find it in Posts. Please check the bot for updates.");
+    return reply(env, chatId, "✅ Task #" + task.id + " approved and published. The poster was notified privately.");
+  }
+  if (text.startsWith("/reject ") || text === "/reject") {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can reject posts.");
+    const match = text.match(/^\\/reject(?:@\\w+)?\\s+(\\d+)\\s*\\|\\s*(.+)$/s);
+    if (!match) return reply(env, chatId, "Format: /reject TASK_ID | reason");
+    const dataChatId = taskChatIdFor(chat, env);
+    const data = await load(env, dataChatId);
+    const task = data.tasks.find(t => t.id === Number(match[1]));
+    if (!task) return reply(env, chatId, "I couldn't find that task.");
+    if (task.status !== "pending_review") return reply(env, chatId, "This post is not waiting for review. Current status: " + (task.status || "legacy/active") + ".");
+    task.status = "rejected";
+    task.reviewedAt = dateNow();
+    task.reviewedBy = user.id;
+    task.reviewReason = match[2].trim().slice(0,300);
+    await save(env, dataChatId, data);
+    await sendPrivate(env, task.posterId, "❌ Your Instagram post was not approved.\\nReason: " + task.reviewReason + "\\nYou may correct the issue and submit a valid post link when eligible.");
+    return reply(env, chatId, "❌ Task #" + task.id + " rejected. The poster was notified privately.");
+  }
   if (text.startsWith("/approvepost")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can approve early posts.");
     const match = text.match(/^\/approvepost(?:@\\w+)?\\s+(\\d+)$/);
@@ -452,7 +498,7 @@ async function handleUpdate(update, env) {
   if (text.startsWith("/tasks") || text.startsWith("/posts")) {
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
-    const ownOpen = data.tasks.filter(t => String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
+    const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
     return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks (including overdue posts — please catch up on all of them):\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n${t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE — please complete this task" : "⏳ Deadline"}: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗")
   }
   if (text.startsWith("/done")) {
@@ -484,6 +530,8 @@ async function handleUpdate(update, env) {
   IG_RE.lastIndex = 0;
   const links = text.match(IG_RE);
   if (!links || !user) return;
+  const postLinks = links.map(cleanInstagramUrl).filter(link => /^https:\/\/www\.instagram\.com\/(?:p|reel|tv)\/[^/]+\/$/i.test(link));
+  if (!postLinks.length) return reply(env, chatId, "🔗 Please share a direct Instagram post, Reel, or IGTV link (for example, instagram.com/p/... or instagram.com/reel/...). Profile links are not accepted. Your message has not been deleted.");
   const data = await load(env, chatId);
   const limits = await loadGlobal(env, "limits", {});
   const currentLimit = limits[String(user.id)];
@@ -511,29 +559,21 @@ async function handleUpdate(update, env) {
   else if (lower.includes("repost")) instruction = "ALL + REPOST";
   const ids = [];
   const canonicalLinks = [];
-  for (const link of links) {
+  for (const link of postLinks) {
     const clean = cleanInstagramUrl(link);
     canonicalLinks.push(clean);
     const id = data.nextId++;
     const createdAt = dateNow();
     const deadline = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
-    data.tasks.push({ id, chatId, messageId: msg.message_id, url: clean, instruction, posterId: user.id, posterName: nameOf(user), at: createdAt, cycle: georgianCycle(new Date(createdAt)), deadline });
+    data.tasks.push({ id, chatId, messageId: msg.message_id, url: clean, instruction, posterId: user.id, posterName: nameOf(user), at: createdAt, cycle: georgianCycle(new Date(createdAt)), deadline, status: "pending_review" });
     ids.push("#" + id);
   }
   await save(env, chatId, data);
   const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed));
   const latestTask = data.tasks.find(t => t.id === Number(ids[0].slice(1)));
-  const note = `💗 Your Instagram link is registered!\n\n${canonicalLinks[0]}\nPosted by: ${displayUser(user)}\nTask ID: ${ids.join(", ")}\nYou can post again after 24 hours: ${formatGeorgian(latestTask.deadline)}\n\nUse /tasks in this bot chat to see posts you need to engage with. Then use /done TASK_ID | your comment and /confirm TASK_ID after liking and saving.\n\nThe bot checks the clean link and reports in this tracker. It cannot independently verify Instagram likes/saves or comments on Instagram.`;
+  const note = `🕵️ Your Instagram post has been received and queued for review.\n\n${canonicalLinks[0]}\nPosted by: ${displayUser(user)}\nTask ID: ${ids.join(", ")}\n\n⏳ Review estimate: 3–5 minutes. This is an estimate, not a guarantee; an admin may need to review it manually.\n\nIf approved, the bot will publish it in Star Links and notify you here. If it is rejected, the bot will send the reason privately. Until approval, it will not appear in members’ assigned Posts list.\n\nYou may submit another post after: ${formatGeorgian(latestTask.deadline)}\nThe bot validates the link format and records the submission; it cannot independently verify Instagram engagement or content availability.`;
   const botUsername = await loadGlobal(env, "botUsername", "");
-  const linkText = "🔗 " + displayUser(user) + "\n" + canonicalLinks.join("\n");
-  if (botUsername) {
-    await telegram(env, "sendMessage", {
-      chat_id: chatId, text: linkText, reply_to_message_id: msg.message_id, disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: [[{ text: "📋 Open my posts in the bot", url: "https://t.me/" + botUsername + "?start=posts" }]] }
-    });
-  } else {
-    await reply(env, chatId, linkText, msg.message_id);
-  }
+  await reply(env, chatId, "🕵️ Post received for review. Estimated review time: 3–5 minutes. It will be published to the group only after approval. The bot cannot independently verify Instagram engagement.", msg.message_id);
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
   if (!dm.ok) {
     console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
