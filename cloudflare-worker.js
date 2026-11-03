@@ -5,8 +5,21 @@ const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 export default {
   async scheduled(controller, env, ctx) {
     const cron = controller.cron || "";
-    if (cron === "0 20 * * SAT") {
-      ctx.waitUntil(setSavesChatOpen(env, true));
+    if (cron === "0 * * * *") {
+      ctx.waitUntil((async () => {
+        await sendEngagementReminders(env, controller.scheduledTime ? new Date(controller.scheduledTime) : new Date());
+        const now = controller.scheduledTime ? new Date(controller.scheduledTime) : new Date();
+        const local = tbilisiParts(now);
+        const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tbilisi", weekday: "short" }).format(now);
+        if (weekday === "Sun" && local.hour === 12 && env.SAVES_CHAT_ID) {
+          await reply(env, env.SAVES_CHAT_ID, "💗 SUNDAY SAVES REMINDER\n\nPlease share the Instagram links you engaged with and upload screenshots or screen recordings as evidence before the Saves window closes at Monday 00:00 Georgia time. This records evidence for admin review; it does not independently verify Instagram actions.");
+        }
+      })());
+    } else if (cron === "0 20 * * SAT") {
+      ctx.waitUntil((async () => {
+        await setSavesChatOpen(env, true);
+        if (env.SAVES_CHAT_ID) await reply(env, env.SAVES_CHAT_ID, "💗 STAR SAVES IS OPEN\n\nSunday 00:00–Monday 00:00 Georgia time. Please share the Instagram links you engaged with and attach screenshots or screen recordings. Admins review submissions manually; evidence is not automatic proof of likes or saves.");
+      })());
     } else if (cron === "0 20 * * SUN") {
       ctx.waitUntil((async () => {
         await setSavesChatOpen(env, false);
@@ -179,6 +192,53 @@ async function setSavesChatOpen(env, open) {
 function georgianDateKey(date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
+async function sendEngagementReminders(env, now = new Date()) {
+  if (!env.LINK_CHAT_ID || !env.LCS_DATA) {
+    console.error("Engagement reminders skipped: configure LINK_CHAT_ID and LCS_DATA.");
+    return;
+  }
+  const data = await load(env, env.LINK_CHAT_ID);
+  const thresholds = [
+    { key: "12h", ms: 12 * 60 * 60 * 1000, min: 4 * 60 * 60 * 1000, label: "⏰ 12-hour reminder" },
+    { key: "4h", ms: 4 * 60 * 60 * 1000, min: 60 * 60 * 1000, label: "🚨 4-hour reminder" },
+    { key: "1h", ms: 60 * 60 * 1000, min: 0, label: "🚨 FINAL 1-hour reminder" },
+    { key: "overdue", ms: 0, min: -24 * 60 * 60 * 1000, label: "⚠️ Past the 24-hour deadline" }
+  ];
+  const notices = [];
+  let changed = false;
+  for (const task of data.tasks || []) {
+    if (!["approved", "active", undefined].includes(task.status) || !task.deadline) continue;
+    const complete = (data.completions || []).some(c =>
+      c.taskId === task.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed
+    );
+    if (complete) continue;
+    const remaining = new Date(task.deadline).getTime() - now.getTime();
+    const threshold = thresholds.find(t => remaining <= t.ms && remaining > t.min && !(task.reminders || []).includes(t.key));
+    if (!threshold) continue;
+    task.reminders = [...(task.reminders || []), threshold.key];
+    changed = true;
+    notices.push({ task, threshold });
+  }
+  if (changed) await save(env, env.LINK_CHAT_ID, data);
+  if (!notices.length) return;
+  const chunks = [];
+  for (const {task, threshold} of notices) {
+    chunks.push(threshold.label + "\\nTask #" + task.id + " · Posted by " + task.posterName + "\\n" + task.url + "\\nPlease open the private bot via /posts and finish the comment, like, and save reports. Deadline: " + formatGeorgian(task.deadline) + ".");
+  }
+  // Aggregate reminders into one message per hourly run to avoid flooding a busy 24/7 group.
+  const header = "💗 STAR LINKS ENGAGEMENT CHECK-IN\\nPlease complete every assigned post within 24 hours. Use the Posts button to open your private task list. Your comment report and like/save confirmation are self-reported and may be reviewed by admins.\\n\\n";
+  const maxLen = 3500;
+  let message = header;
+  for (const item of chunks) {
+    if ((message + item + "\\n\\n").length > maxLen) {
+      await reply(env, env.LINK_CHAT_ID, message.trim());
+      message = "💗 STAR LINKS REMINDER (continued)\\n\\n";
+    }
+    message += item + "\\n\\n";
+  }
+  if (message.trim() !== header.trim()) await reply(env, env.LINK_CHAT_ID, message.trim());
+}
+
 async function sendWeeklyEvidenceReport(env, scheduledTime = new Date()) {
   if (!env.WARNING_CHAT_ID || !env.SAVES_CHAT_ID || !env.LCS_DATA) {
     console.error("Weekly evidence report skipped: configure WARNING_CHAT_ID, SAVES_CHAT_ID and LCS_DATA.");
