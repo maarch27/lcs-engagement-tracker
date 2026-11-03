@@ -3,6 +3,92 @@ const GENERIC_COMMENTS = new Set(["nice", "nice post", "love it", "i like this p
 const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 const DB_PREFIX = "chat:";
 
+const IG_ADMINS = [
+  ["maarch_27", "https://www.instagram.com/maarch_27/"],
+  ["lizalens__", "https://www.instagram.com/lizalens__/"],
+  ["itsimplymartha", "https://www.instagram.com/itsimplymartha/"],
+  ["dr.lamarya", "https://www.instagram.com/dr.lamarya/"],
+];
+const IG_MEMBERS = [
+  ["meksssun", "https://www.instagram.com/meksssun/"],
+  ["ugc.tako", "https://www.instagram.com/ugc.tako/"],
+  ["mariamkha.ugc", "https://www.instagram.com/mariamkha.ugc/"],
+  ["niiinuciii", "https://www.instagram.com/niiinuciii/"],
+  ["sergeevaaianaaa", "https://www.instagram.com/sergeevaaianaaa/"],
+  ["marishkkan", "https://www.instagram.com/marishkkan/"],
+  ["tamu__bb", "https://www.instagram.com/tamu__bb/"],
+  ["by.marsho", "https://www.instagram.com/by.marsho/"],
+  ["sallom_ee", "https://www.instagram.com/sallom_ee/"],
+  ["aniardazishvili", "https://www.instagram.com/aniardazishvili/"],
+  ["tata.papiashvili", "https://www.instagram.com/tata.papiashvili/"],
+  ["kokhre.salluka", "https://www.instagram.com/kokhre.salluka/"],
+  ["ugcwithgvantsi", "https://www.instagram.com/ugcwithgvantsi/"],
+  ["ddzuguu", "https://www.instagram.com/ddzuguu/"],
+  ["sesilia_tr", "https://www.instagram.com/sesilia_tr/"],
+  ["ugcketi_", "https://www.instagram.com/ugcketi_/"],
+  ["marisa_ugccreator", "https://www.instagram.com/marisa_ugccreator/"],
+  ["ildas.way", "https://www.instagram.com/ildas.way/"],
+  ["khatia.chargazia", "https://www.instagram.com/khatia.chargazia/"],
+  ["teo.createss_", "https://www.instagram.com/teo.createss_/"],
+  ["lana_span", "https://www.instagram.com/lana_span/"],
+  ["manoni_ugc", "https://www.instagram.com/manoni_ugc/"],
+  ["ninuca.ugc", "https://www.instagram.com/ninuca.ugc/"],
+  ["tati.mtskerashvili", "https://www.instagram.com/tati.mtskerashvili/"],
+  ["taks_ugc", "https://www.instagram.com/taks_ugc/"],
+  ["nina_zarnadze", "https://www.instagram.com/nina_zarnadze/"],
+  ["marlen__music", "https://www.instagram.com/marlen__music/"],
+  ["teona.kurtanidze", "https://www.instagram.com/teona.kurtanidze/"],
+  ["__lilluuu", "https://www.instagram.com/__lilluuu/"],
+  ["tamaras_style", "https://www.instagram.com/tamaras_style/"],
+  ["teokekos_", "https://www.instagram.com/teokekos_/"],
+  ["merriem3.14 (please verify)", "https://www.instagram.com/merriem3.14/"],
+  ["bbetheaa", "https://www.instagram.com/bbetheaa/"],
+  ["itsjeni1212", "https://www.instagram.com/itsjeni1212/"],
+  ["sallyna___", "https://www.instagram.com/sallyna___/"],
+  ["ugc_eka", "https://www.instagram.com/ugc_eka/"],
+  ["tamarcreates", "https://www.instagram.com/tamarcreates/"],
+  ["mariam_giorgashvili", "https://www.instagram.com/mariam_giorgashvili/"],
+  ["kesanekes", "https://www.instagram.com/kesanekes/"],
+];
+const CHAT_RULES = `❗️CHAT RULES — PLEASE READ CAREFULLY (RULES HAVE BEEN UPDATED!)
+☑ All members must follow every member of the chat.
+☑ Admins can choose whether or not to complete links.
+☑ Admins are allowed to post up to 2 links/posts.
+☑ Only 1 post/link per 24 hours is allowed.
+☑ You can post any content, whether it is old or new.
+☑ Comments must contain at least 3 words.
+☑ If a post requires ALL, comments must contain at least 3 words. Emoji-only comments are not allowed. When sharing a link, mention what the product is about! Bot-like or generic comments are also prohibited.
+☑ Engagement on all posts must be completed within 24 hours. Activity will be checked daily!
+☑ It does not matter whether you have been inactive and haven’t posted a link for one week or two — you must still complete all outstanding links.
+☑ After joining the chat, you must follow all members within 24 hours. Members’ Instagram links are pinned in the links chat. Other members will follow you back within 24 hours. If someone hasn’t followed you back, tag them in the discussion chat.
+☑ Saves are posted only on Sundays.
+☑ Sunday is our rest day — only saves are allowed to be posted.
+‼️ If you do not have your required saves completed within 48 hours, you will be banned from posting links. However, you must continue completing other members’ links.
+‼️ After receiving 3 warnings, you must leave the chat. Admins will notify you in advance.
+‼️ If you are unable to participate in engagement, you must post a numbered warning using #WARNING.
+Example: #WARNING2 I won’t be able to participate in engagement.
+Warnings must be numbered consecutively. A maximum of 2 warnings per month is allowed.
+📌 SATURDAY RULE
+On Saturdays, you may post someone else’s link, but you must clearly label it (Someone else’s link).
+You are allowed to post only ONE link in total — either your own link or someone else’s.
+📌 RETURNING AFTER INACTIVITY
+When you become active again, you must write #IMBACK.
+For any links you missed while you were away, you only need to complete the likes and saves.
+📌 TELEGRAM & CHAT ETIQUETTE
+⭕️ Use the same name on Telegram as the one you use on Instagram.
+⭕️ Use the same profile picture on Telegram as the one you use on Instagram.
+⭕️ Do not leave generic or bot-like comments such as:
+• “Wow”
+• “Great”
+• “Cool content”
+• “I love this content”
+• “Great product”
+⭕️ Do not write anything in the Saves Chat except warnings and save links. For general conversations, please use the Discussion Chat or the Star Chat space.
+⭕️ Sharing paid collaboration opportunities is mandatory. If you do not share paid opportunities with the group, you may be required to leave the chat.
+⭕️ You can contact the admins privately at any time if you have questions or concerns.
+Thank you for respecting the rules and helping us keep the group fair, active, and supportive for everyone! 💗`;
+
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -45,11 +131,10 @@ async function handleSetup(url, env) {
   if (existingUrl && existingUrl !== workerUrl) {
     return json({ ok: false, reason: "A different webhook is already configured. No changes were made.", urlHost: safeHost(existingUrl) }, 409);
   }
-  if (existingUrl === workerUrl) return json({ ok: true, alreadyConfigured: true, urlHost: safeHost(existingUrl) });
   const setResponse = await telegramApi(env, "setWebhook", {
     url: workerUrl,
     secret_token: env.WEBHOOK_SECRET,
-    allowed_updates: ["message", "chat_member"],
+    allowed_updates: ["message", "chat_member", "callback_query"],
   });
   return json(setResponse.data, setResponse.status);
 }
@@ -115,16 +200,10 @@ function rememberMember(data, chatId, user) {
   if (!user || user.is_bot) return false;
   const userId = String(user.id);
   const userName = nameOf(user);
-  let changed = data.members[userId] !== userName;
+  const changed = data.members[userId] !== userName;
   data.members[userId] = userName;
-  const now = Date.now();
-  for (const task of data.tasks) {
-    if (task.chatId !== String(chatId) || task.posterId === userId || Date.parse(task.dueAt) <= now || hasCompletion(data, task.id, userId)) continue;
-    if (!task.targets.some(target => target.userId === userId)) {
-      task.targets.push({ userId, userName });
-      changed = true;
-    }
-  }
+  // New members only enter tasks created after the bot first sees them.
+  // Do not add them retroactively to links posted before they joined.
   return changed;
 }
 
@@ -143,27 +222,35 @@ function commandOf(text) {
 }
 
 async function handleUpdate(update, env) {
+  if (update.callback_query) return handleMenuCallback(update.callback_query, env);
   if (update.chat_member) return trackMemberUpdate(update.chat_member, env);
-  const msg = update.message;
-  if (!msg?.chat) return;
-  const chat = msg.chat;
-  const user = msg.from;
-  const text = msg.text || msg.caption || "";
-  const command = commandOf(text);
-  if (command === "/start" || command === "/help") {
-    return reply(env, chat.id,
-      "💗 LCS Engagement Tracker is online.\n\n" +
-      "Instagram links shared in this group become tasks with a rolling 24-hour deadline. " +
-      "After the deadline, missing completion reports are sent privately and placed in an admin review queue.\n\n" +
-      "Commands: /rules /tasks /done /report /review /approve /dismiss /warn /finalwarn /admin\n\n" +
-      "Open this private chat and press Start to receive private reminders. The bot cannot verify Instagram likes or saves.");
+  const original = update.message;
+  if (!original?.chat) return;
+  const isGroup = original.chat.type === "group" || original.chat.type === "supergroup";
+  const command = commandOf(original.text || original.caption || "");
+  let msg = original;
+  if (isGroup && original.from) msg = { ...original, replyChatId: original.from.id };
+  if (!isGroup && original.chat.type === "private" && command && !["/start", "/help"].includes(command)) {
+    const groupId = await findMemberGroup(env, original.from?.id);
+    if (!groupId) return reply(env, original.chat.id, "Open the engagement group and send any message first so I can connect your private menu.");
+    msg = { ...original, chat: { ...original.chat, id: groupId }, replyChatId: original.chat.id };
   }
-  if (command === "/rules") return rules(env, chat.id);
+  const chat = msg.chat;
+  const user = original.from;
+  const text = original.text || original.caption || "";
+  if (command === "/start" || command === "/help") {
+    if (isGroup) return;
+    return sendMenu(env, original.chat.id);
+  }
+  if (command === "/rules") {
+    if (isGroup) return;
+    return reply(env, original.chat.id, CHAT_RULES);
+  }
 
-  const isGroup = chat.type === "group" || chat.type === "supergroup";
+  const isGroupContext = isGroup || original.chat.type === "private";
   let groupData;
   let memberChanged = false;
-  if (isGroup) {
+  if (isGroupContext) {
     groupData = await loadChat(env, chat.id);
     memberChanged = rememberMember(groupData, chat.id, user);
   }
@@ -197,7 +284,7 @@ async function handleUpdate(update, env) {
     return issueManualWarning(env, msg, command === "/finalwarn");
   }
 
-  if (!["group", "supergroup"].includes(chat.type) || !user) return;
+  if (!isGroup || !user) return;
   const matches = text.match(IG_RE);
   if (!matches?.length) {
     if (memberChanged) await saveChat(env, chat.id, groupData);
@@ -227,7 +314,7 @@ async function handleUpdate(update, env) {
   }
   await saveChat(env, chat.id, data);
   const dueDisplay = dueAt.replace("T", " ").replace(".000Z", " UTC");
-  await reply(env, chat.id,
+  await reply(env, msg.replyChatId || chat.id,
     "📌 Telegram link task created: " + ids.join(", ") + "\nInstruction: " + instruction +
     "\n24-hour deadline: " + dueDisplay + "\nPlease like + save and leave the requested comment.\n" +
     "Report with /done TASK_ID | your comment. Instagram likes and saves are not independently verified.", msg.message_id);
@@ -248,41 +335,41 @@ async function listTasks(env, msg) {
   const data = await loadChat(env, msg.chat.id);
   const userId = String(msg.from.id);
   const rows = data.tasks.filter(task => task.targets.some(target => target.userId === userId) && !hasCompletion(data, task.id, userId)).slice(-30).reverse();
-  if (!rows.length) return reply(env, msg.chat.id, "You have no open tracked tasks assigned to you 💗");
+  if (!rows.length) return reply(env, msg.replyChatId || msg.chat.id, "You have no open tracked tasks assigned to you 💗");
   const lines = ["📋 Your open tasks (deadlines in UTC):"];
   for (const task of rows) lines.push("Task #" + task.id + " · " + task.instruction + " · posted by " + task.posterName + "\nDue: " + task.dueAt + "\n" + task.url);
-  return reply(env, msg.chat.id, lines.join("\n\n"));
+  return reply(env, msg.replyChatId || msg.chat.id, lines.join("\n\n"));
 }
 
 async function done(env, msg) {
   const match = (msg.text || "").match(/^\/done(?:@\w+)?\s+(\d+)\s*\|\s*(.+)$/s);
-  if (!match) return reply(env, msg.chat.id, "Format: /done TASK_ID | the meaningful comment you left");
+  if (!match) return reply(env, msg.replyChatId || msg.chat.id, "Format: /done TASK_ID | the meaningful comment you left");
   const taskId = Number(match[1]);
   const comment = match[2].trim();
   const data = await loadChat(env, msg.chat.id);
   const task = data.tasks.find(item => item.id === taskId);
-  if (!task) return reply(env, msg.chat.id, "I couldn't find that task in this chat. Use /tasks.");
-  if (task.posterId === String(msg.from.id)) return reply(env, msg.chat.id, "You can't report engagement on your own post.");
+  if (!task) return reply(env, msg.replyChatId || msg.chat.id, "I couldn't find that task in this chat. Use /tasks.");
+  if (task.posterId === String(msg.from.id)) return reply(env, msg.replyChatId || msg.chat.id, "You can't report engagement on your own post.");
   if (task.instruction !== "EMOJI_ONLY" && genericOrShort(comment) && !(await isAdmin(env, msg.chat.id, msg.from.id, msg.from.username))) {
-    return reply(env, msg.chat.id, "⚠️ Please use at least 3 meaningful words specific to the post, unless the post asks for emojis or another format.");
+    return reply(env, msg.replyChatId || msg.chat.id, "⚠️ Please use at least 3 meaningful words specific to the post, unless the post asks for emojis or another format.");
   }
   const completion = { taskId, userId: String(msg.from.id), userName: nameOf(msg.from), comment: comment.slice(0, 500), at: new Date().toISOString() };
   const existing = data.completions.findIndex(item => item.taskId === taskId && item.userId === completion.userId);
   if (existing >= 0) data.completions[existing] = completion;
   else data.completions.push(completion);
   await saveChat(env, msg.chat.id, data);
-  return reply(env, msg.chat.id, "💗 Self-report recorded for task #" + taskId + ". This does not independently verify the Instagram like or save.");
+  return reply(env, msg.replyChatId || msg.chat.id, "💗 Self-report recorded for task #" + taskId + ". This does not independently verify the Instagram like or save.");
 }
 
 async function requireAdmin(env, msg) {
   if (await isAdmin(env, msg.chat.id, msg.from.id, msg.from.username)) return true;
-  await reply(env, msg.chat.id, "This command is available to group admins only.");
+  await reply(env, msg.replyChatId || msg.chat.id, "This command is available to group admins only.");
   return false;
 }
 
 async function adminCommand(env, msg) {
   if (!(await requireAdmin(env, msg))) return;
-  return reply(env, msg.chat.id,
+  return reply(env, msg.replyChatId || msg.chat.id,
     "🛠 Admin commands\n/review — pending overdue-task reviews\n" +
     "/approve TASK_ID USER_ID — confirm miss and issue next warning\n" +
     "/dismiss TASK_ID USER_ID — dismiss review\n/warn @username reason\n/finalwarn @username reason\n" +
@@ -296,7 +383,7 @@ async function report(env, msg) {
   const open = data.tasks.reduce((count, task) => count + task.targets.filter(target => !hasCompletion(data, task.id, target.userId)).length, 0);
   const today = new Date().toISOString().slice(0, 10);
   const warningsToday = data.warnings.filter(item => item.issuedAt.startsWith(today)).length;
-  return reply(env, msg.chat.id,
+  return reply(env, msg.replyChatId || msg.chat.id,
     "📊 LCS tracker report\nTasks recorded: " + data.tasks.length + "\nOpen task assignments: " + open +
     "\nPending overdue reviews: " + pending + "\nWarnings issued today (UTC): " + warningsToday +
     "\n\nInstagram likes and saves are not independently verified. Overdue tasks require admin review before warnings are issued.");
@@ -306,26 +393,26 @@ async function review(env, msg) {
   if (!(await requireAdmin(env, msg))) return;
   const data = await loadChat(env, msg.chat.id);
   const rows = data.reviews.filter(item => item.status === "pending").slice(-30).reverse();
-  if (!rows.length) return reply(env, msg.chat.id, "No overdue tasks are waiting for review 💗");
+  if (!rows.length) return reply(env, msg.replyChatId || msg.chat.id, "No overdue tasks are waiting for review 💗");
   const lines = ["🔎 Pending overdue-task reviews (not confirmed violations):"];
   for (const item of rows) lines.push("Task #" + item.taskId + " · " + item.userName + " (user ID " + item.userId + ")\n" + item.reason + "\nApprove: /approve " + item.taskId + " " + item.userId + "\nDismiss: /dismiss " + item.taskId + " " + item.userId);
-  return reply(env, msg.chat.id, lines.join("\n\n"));
+  return reply(env, msg.replyChatId || msg.chat.id, lines.join("\n\n"));
 }
 
 async function reviewDecision(env, msg, command) {
   if (!(await requireAdmin(env, msg))) return;
   const parts = (msg.text || "").trim().split(/\s+/);
-  if (parts.length !== 3 || !/^\d+$/.test(parts[1]) || !/^\d+$/.test(parts[2])) return reply(env, msg.chat.id, "Format: /approve TASK_ID USER_ID or /dismiss TASK_ID USER_ID");
+  if (parts.length !== 3 || !/^\d+$/.test(parts[1]) || !/^\d+$/.test(parts[2])) return reply(env, msg.replyChatId || msg.chat.id, "Format: /approve TASK_ID USER_ID or /dismiss TASK_ID USER_ID");
   const taskId = Number(parts[1]);
   const userId = String(parts[2]);
   const data = await loadChat(env, msg.chat.id);
   const item = data.reviews.find(row => row.taskId === taskId && row.userId === userId && row.status === "pending");
-  if (!item) return reply(env, msg.chat.id, "No matching pending review was found.");
+  if (!item) return reply(env, msg.replyChatId || msg.chat.id, "No matching pending review was found.");
   if (command === "/dismiss") {
     item.status = "dismissed";
     item.reviewedAt = new Date().toISOString();
     await saveChat(env, msg.chat.id, data);
-    return reply(env, msg.chat.id, "Review dismissed for task #" + taskId + ". No warning was issued.");
+    return reply(env, msg.replyChatId || msg.chat.id, "Review dismissed for task #" + taskId + ". No warning was issued.");
   }
   const prior = data.warnings.filter(warning => warning.userId === userId).length;
   const level = Math.min(prior + 1, 3);
@@ -335,18 +422,18 @@ async function reviewDecision(env, msg, command) {
   data.warnings.push({ userId, userName: item.userName, level, reason, issuedAt: item.reviewedAt, issuedBy: nameOf(msg.from) });
   await saveChat(env, msg.chat.id, data);
   const notice = level === 1 ? "⚠️ First warning" : (level === 2 ? "⚠️ Second warning — repeated missed deadlines are being recorded." : "🚨 FINAL WARNING — further missed deadlines may lead to removal after admin review.");
-  return reply(env, msg.chat.id, notice + "\nMember: " + item.userName + "\n" + reason);
+  return reply(env, msg.replyChatId || msg.chat.id, notice + "\nMember: " + item.userName + "\n" + reason);
 }
 
 async function issueManualWarning(env, msg, isFinal) {
   if (!(await requireAdmin(env, msg))) return;
   const match = (msg.text || "").match(/^\/(?:finalwarn|warn)(?:@\w+)?\s+@?(\w+)\s+(.+)$/s);
-  if (!match) return reply(env, msg.chat.id, "Format: /warn @username reason");
+  if (!match) return reply(env, msg.replyChatId || msg.chat.id, "Format: /warn @username reason");
   const username = "@" + match[1].toLowerCase();
   const reason = match[2].trim();
   const data = await loadChat(env, msg.chat.id);
   const member = Object.entries(data.members).find(([, name]) => name.toLowerCase() === username);
-  if (!member) return reply(env, msg.chat.id, "I don't have that member in my tracked roster yet. Ask them to send a message in the group, then try again.");
+  if (!member) return reply(env, msg.replyChatId || msg.chat.id, "I don't have that member in my tracked roster yet. Ask them to send a message in the group, then try again.");
   const userId = member[0];
   const userName = member[1];
   const prior = data.warnings.filter(warning => warning.userId === userId).length;
@@ -354,7 +441,7 @@ async function issueManualWarning(env, msg, isFinal) {
   data.warnings.push({ userId, userName, level, reason, issuedAt: new Date().toISOString(), issuedBy: nameOf(msg.from) });
   await saveChat(env, msg.chat.id, data);
   const notice = level === 3 ? "🚨 FINAL WARNING" : (level === 2 ? "⚠️ Second warning" : "⚠️ First warning");
-  return reply(env, msg.chat.id, notice + "\nMember: " + userName + "\nReason: " + reason);
+  return reply(env, msg.replyChatId || msg.chat.id, notice + "\nMember: " + userName + "\nReason: " + reason);
 }
 
 async function trackMemberUpdate(update, env) {
@@ -364,6 +451,123 @@ async function trackMemberUpdate(update, env) {
   const data = await loadChat(env, chat.id);
   rememberMember(data, chat.id, member.user);
   await saveChat(env, chat.id, data);
+  const oldStatus = update.old_chat_member?.status;
+  if (!["member", "administrator", "creator", "restricted"].includes(oldStatus)) {
+    const name = htmlEscape(nameOf(member.user));
+    await telegram(env, "sendMessage", {
+      chat_id: chat.id,
+      text: "💗 Welcome " + name + " to our chat! Please read the pinned rules and follow all members within 24 hours.",
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [[{ text: "📖 Read the rules privately", callback_data: "menu:rules" }]] },
+    });
+  }
+}
+
+
+async function findMemberGroup(env, userId) {
+  if (!userId) return null;
+  let cursor;
+  do {
+    const page = await env.LCS_DATA.list({ prefix: DB_PREFIX, cursor, limit: 100 });
+    for (const key of page.keys) {
+      const data = await loadChat(env, key.name.slice(DB_PREFIX.length));
+      if (data.members?.[String(userId)]) return key.name.slice(DB_PREFIX.length);
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return null;
+}
+
+function menuKeyboard() {
+  return { inline_keyboard: [
+    [{ text: "📌 Posts", callback_data: "menu:posts" }, { text: "📋 List", callback_data: "menu:list:0" }],
+    [{ text: "👑 Admins", callback_data: "menu:admins" }, { text: "💬 Chats", callback_data: "menu:chats" }],
+    [{ text: "💾 Saves", callback_data: "menu:saves" }, { text: "📖 Rules", callback_data: "menu:rules" }],
+  ] };
+}
+
+async function sendMenu(env, chatId) {
+  return telegram(env, "sendMessage", {
+    chat_id: chatId,
+    text: "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
+    reply_markup: menuKeyboard(),
+    disable_web_page_preview: true,
+  });
+}
+
+function htmlEscape(value) {
+  return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+async function handleMenuCallback(query, env) {
+  const userId = query.from?.id;
+  const data = query.data || "";
+  await telegram(env, "answerCallbackQuery", { callback_query_id: query.id });
+  if (!query.message || !userId) return;
+  const chatId = query.message.chat.id;
+  if (query.message.chat.type !== "private") {
+    if (data === "menu:rules") return reply(env, userId, CHAT_RULES);
+    return;
+  }
+  let body = "💗 LCS Engagement Tracker";
+  let keyboard = menuKeyboard();
+  if (data === "menu:rules") body = CHAT_RULES;
+  else if (data === "menu:admins") {
+    body = "👑 <b>Admins</b>\n" + IG_ADMINS.map(([name, url]) => "• <a href=\"" + url + "\">@" + htmlEscape(name) + "</a>").join("\n") +
+      "\n\nAdmin permissions are controlled by Telegram group admin status; these Instagram links are directory entries.";
+  } else if (data.startsWith("menu:list:")) {
+    const page = Math.max(0, Number(data.split(":")[2]) || 0);
+    const pageSize = 10;
+    const start = page * pageSize;
+    const rows = IG_MEMBERS.slice(start, start + pageSize);
+    body = "📋 <b>Member links</b> · page " + (page + 1) + "/" + Math.ceil(IG_MEMBERS.length / pageSize) +
+      "\n\n" + rows.map(([name, url]) => "• <a href=\"" + url + "\">@" + htmlEscape(name) + "</a>").join("\n");
+    const nav = [];
+    if (page > 0) nav.push({ text: "← Previous", callback_data: "menu:list:" + (page - 1) });
+    if (start + pageSize < IG_MEMBERS.length) nav.push({ text: "Next →", callback_data: "menu:list:" + (page + 1) });
+    keyboard = { inline_keyboard: [nav, [{ text: "🏠 Menu", callback_data: "menu:home" }]].filter(row => row.length) };
+  } else if (data === "menu:posts") {
+    let cursor;
+    const tasks = [];
+    do {
+      const page = await env.LCS_DATA.list({ prefix: DB_PREFIX, cursor, limit: 100 });
+      for (const key of page.keys) {
+        const chatData = await loadChat(env, key.name.slice(DB_PREFIX.length));
+        for (const task of chatData.tasks || []) tasks.push(task);
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    tasks.sort((a,b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const rows = tasks.slice(0, 8);
+    body = rows.length
+      ? "📌 <b>Recent posts</b>\n\n" + rows.map(task =>
+        "Task #" + task.id + " · " + htmlEscape(task.posterName || "member") + " · " + htmlEscape(task.instruction) +
+        "\nDue: " + htmlEscape(task.dueAt) + "\n<a href=\"" + htmlEscape(task.url) + "\">Open Instagram post</a>").join("\n\n") +
+        "\n\nUse <code>/tasks</code> to see your assignments or <code>/done TASK_ID | your comment</code> to report completion."
+      : "📌 No Telegram post tasks have been recorded yet. Share an Instagram post link in the engagement group to create a task.";
+  } else if (data === "menu:chats") {
+    let cursor;
+    const chats = [];
+    do {
+      const page = await env.LCS_DATA.list({ prefix: DB_PREFIX, cursor, limit: 100 });
+      for (const key of page.keys) chats.push(key.name.slice(DB_PREFIX.length));
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    body = chats.length
+      ? "💬 <b>Connected Telegram chats</b>\n" + chats.length + " chat(s) have tracker data. Use /tasks, /done or /report here in this private chat.\n\nPrivate invite links are not stored by the bot."
+      : "💬 No Telegram engagement chat has connected to the tracker yet.";
+  } else if (data === "menu:saves") {
+    body = "💾 <b>Saves</b>\nSaves are posted only on Sundays under your rules. Instagram does not let this bot read anyone’s private Saved folder, so the bot cannot verify a save. Please follow the group’s save-link process and use /done for your self-report.";
+  } else if (data === "menu:home") {
+    body = "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
+  }
+  const call = await telegram(env, "editMessageText", {
+    chat_id: chatId, message_id: query.message.message_id, text: body,
+    parse_mode: "HTML", disable_web_page_preview: true, reply_markup: keyboard,
+  });
+  if (!call.data?.ok) {
+    await telegram(env, "sendMessage", { chat_id: chatId, text: body.replace(/<[^>]+>/g, ""), reply_markup: keyboard, disable_web_page_preview: true });
+  }
 }
 
 function georgiaHour(date) {
