@@ -41,6 +41,8 @@ export default {
             { command: "done", description: "Report your comment: /done TASK_ID | comment" },
             { command: "confirm", description: "Confirm you liked and saved a post" },
             { command: "reviewposts", description: "Admin: review pending post submissions" },
+            { command: "approve", description: "Admin: approve a pending post by task ID" },
+            { command: "reject", description: "Admin: reject a pending post with a reason" },
             { command: "warnings", description: "Check your warning count" },
             { command: "rules", description: "Read the engagement rules" },
             { command: "help", description: "Open help and menu" }
@@ -542,7 +544,7 @@ async function handleUpdate(update, env) {
   }
   const approvals = await loadGlobal(env, "postApprovals", {});
   const approval = approvals[String(user.id)];
-  const lastPost = data.tasks.filter(t => String(t.posterId) === String(user.id)).sort((a,b) => new Date(b.at)-new Date(a.at))[0];
+  const lastPost = data.tasks.filter(t => String(t.posterId) === String(user.id) && t.status !== "rejected").sort((a,b) => new Date(b.at)-new Date(a.at))[0];
   const elapsed = lastPost ? Date.now() - new Date(lastPost.at).getTime() : Infinity;
   if (lastPost && elapsed < 24 * 60 * 60 * 1000 && !(approval && !approval.used)) {
     const availableAt = new Date(new Date(lastPost.at).getTime() + 24 * 60 * 60 * 1000);
