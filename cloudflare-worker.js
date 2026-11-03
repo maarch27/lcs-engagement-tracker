@@ -116,9 +116,10 @@ async function handleUpdate(update, env) {
     const report = rows.length
       ? "📌 Tracked posts · latest 30\n\n" + rows.map(t => {
           const done = data.completions.filter(x => x.taskId === t.id);
-          return `Task #${t.id} · ${t.posterName} · ${t.instruction}\nDue: ${t.deadline ? formatGeorgian(t.deadline) : "Not set"}\nReports: ${done.length}\n${t.url}`;
+          const overdue = t.deadline && Date.now() > new Date(t.deadline).getTime();
+          return `Task #${t.id} · ${t.posterName} · ${t.instruction}\nStatus: ${done.length ? "Completion reported (self-reported)" : overdue ? "⚠️ OVERDUE — no report" : "⏳ Awaiting engagement"}\nDue: ${t.deadline ? formatGeorgian(t.deadline) : "Not set"}\nReports: ${done.length}\n${t.url}`;
         }).join("\n\n") + "\n\nAdmin control: use /remove TASK_ID in the group to stop tracking a post."
-      : "📌 No tracked posts yet.";
+      : "📌 No tracked posts yet."
     const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: report, disable_web_page_preview: true });
     if (!dm.ok) return reply(env, chatId, "I couldn't send the tracked-post list privately. Open the bot and send /start first, then run /tracked again in the group.");
     return reply(env, chatId, "📩 I sent the tracked-post list to your private bot chat.");
@@ -142,7 +143,7 @@ async function handleUpdate(update, env) {
   if (text.startsWith("/tasks")) {
     const data = await load(env, chatId);
     const ownOpen = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id)).slice(-20).reverse();
-    return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks:\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n⏳ Deadline: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗");
+    return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks (including overdue posts — please catch up on all of them):\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n${t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE — please complete this task" : "⏳ Deadline"}: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗")
   }
   if (text.startsWith("/done")) {
     const match = text.match(/^\/done(?:@\w+)?\s+(\d+)\s*\|\s*(.+)$/s);
@@ -181,7 +182,7 @@ async function handleUpdate(update, env) {
     const clean = link.replace(/[.,!?\)\]\}]+$/g, "");
     const id = data.nextId++;
     const createdAt = dateNow();
-    const deadline = nextGeorgianDeadline(new Date(createdAt));
+    const deadline = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
     data.tasks.push({ id, chatId, messageId: msg.message_id, url: clean, instruction, posterId: user.id, posterName: nameOf(user), at: createdAt, cycle: georgianCycle(new Date(createdAt)), deadline });
     ids.push("#" + id);
   }
