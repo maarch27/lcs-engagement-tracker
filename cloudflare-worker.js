@@ -5,10 +5,10 @@ const DB_PREFIX = "chat:";
 const SAVES_CHAT_ID = "-3760298679";
 
 const IG_ADMINS = [
-  ["maarch_27", "https://www.instagram.com/maarch_27/"],
-  ["lizalens__", "https://www.instagram.com/lizalens__/"],
-  ["itsimplymartha", "https://www.instagram.com/itsimplymartha/"],
-  ["dr.lamarya", "https://www.instagram.com/dr.lamarya/"],
+  ["maarch_27", "https://www.instagram.com/maarch_27/", "marriaammi"],
+  ["lizalens__", "https://www.instagram.com/lizalens__/", "lizal"],
+  ["itsimplymartha", "https://www.instagram.com/itsimplymartha/", "itsimplymartha"],
+  ["dr.lamarya", "https://www.instagram.com/dr.lamarya/", "drlamarya"],
 ];
 const IG_MEMBERS = [
   ["meksssun", "https://www.instagram.com/meksssun/"],
@@ -244,7 +244,6 @@ async function handleUpdate(update, env) {
     return sendMenu(env, original.chat.id);
   }
   if (command === "/rules") {
-    if (isGroup) return;
     return reply(env, original.chat.id, CHAT_RULES);
   }
 
@@ -487,7 +486,7 @@ async function findMemberGroup(env, userId) {
 
 function menuKeyboard() {
   return { inline_keyboard: [
-    [{ text: "📌 Posts", callback_data: "menu:posts:0" }, { text: "📋 List", callback_data: "menu:list:0" }],
+    [{ text: "📌 Posts", callback_data: "menu:posts:0" }, { text: "👥 Members", callback_data: "menu:list:0" }],
     [{ text: "👑 Admins", callback_data: "menu:admins" }, { text: "💬 Chats", callback_data: "menu:chats" }],
     [{ text: "💾 Saves", callback_data: "menu:saves" }, { text: "📖 Rules", callback_data: "menu:rules" }],
   ] };
@@ -516,14 +515,15 @@ async function handleMenuCallback(query, env) {
   let keyboard = menuKeyboard();
   if (data === "menu:rules") body = CHAT_RULES;
   else if (data === "menu:admins") {
-    body = "👑 <b>Admins</b>\n" + IG_ADMINS.map(([name, url]) => "• <a href=\"" + url + "\">@" + htmlEscape(name) + "</a>").join("\n") +
-      "\n\nAdmin permissions are controlled by Telegram group admin status; these Instagram links are directory entries.";
+    body = "👑 <b>Admins — follow or message</b>\n" + IG_ADMINS.map(([name, url, telegramUsername]) =>
+      "• <a href=\"" + url + "\">@" + htmlEscape(name) + "</a> · <a href=\"https://t.me/" + telegramUsername + "\">Message on Telegram</a>"
+    ).join("\n") + "\n\nUse the Instagram link to follow an admin, or the Telegram link to contact them.";
   } else if (data.startsWith("menu:list:")) {
     const page = Math.max(0, Number(data.split(":")[2]) || 0);
     const pageSize = 10;
     const start = page * pageSize;
     const rows = IG_MEMBERS.slice(start, start + pageSize);
-    body = "📋 <b>Member links</b> · page " + (page + 1) + "/" + Math.ceil(IG_MEMBERS.length / pageSize) +
+    body = "👥 <b>Members to follow</b> · page " + (page + 1) + "/" + Math.ceil(IG_MEMBERS.length / pageSize) +
       "\n\n" + rows.map(([name, url]) => "• <a href=\"" + url + "\">@" + htmlEscape(name) + "</a>").join("\n");
     const nav = [];
     if (page > 0) nav.push({ text: "← Previous", callback_data: "menu:list:" + (page - 1) });
