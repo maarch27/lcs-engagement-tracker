@@ -90,7 +90,7 @@ async function handleUpdate(update, env) {
   const text = msg.text || msg.caption || "";
   if (text.startsWith("/start") || text.startsWith("/help")) {
     return reply(env, chatId,
-      "💗 LCS Engagement Tracker\n\n/rules — community rules\n/tasks — your unreported tasks\n/done TASK_ID | meaningful comment — self-report completion\n/report — admin daily report\n/flags — admin review queue\n/admin — admin controls\n\nLikes and saves are required, but Telegram cannot independently verify them. Admins can post normally; the bot does not delete posts or automatically ban anyone.");
+      "💗 Welcome to the LCS Engagement Tracker!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view your engagement tasks\n/rules — read the community rules\n/done TASK_ID | your comment — report your comment\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n\n💌 NEED HELP?\nMembers and admins can contact the admin team: @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nPlease remember to like, save, and leave a meaningful comment on each assigned post. 💗");
   }
   if (text.startsWith("/rules")) {
     return reply(env, chatId,
