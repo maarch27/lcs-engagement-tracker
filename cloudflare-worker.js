@@ -200,16 +200,10 @@ function rememberMember(data, chatId, user) {
   if (!user || user.is_bot) return false;
   const userId = String(user.id);
   const userName = nameOf(user);
-  let changed = data.members[userId] !== userName;
+  const changed = data.members[userId] !== userName;
   data.members[userId] = userName;
-  const now = Date.now();
-  for (const task of data.tasks) {
-    if (task.chatId !== String(chatId) || task.posterId === userId || Date.parse(task.dueAt) <= now || hasCompletion(data, task.id, userId)) continue;
-    if (!task.targets.some(target => target.userId === userId)) {
-      task.targets.push({ userId, userName });
-      changed = true;
-    }
-  }
+  // New members only enter tasks created after the bot first sees them.
+  // Do not add them retroactively to links posted before they joined.
   return changed;
 }
 
