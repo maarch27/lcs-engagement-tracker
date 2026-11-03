@@ -368,7 +368,7 @@ async function handleUpdate(update, env) {
   }
   if (text.startsWith("/approve ") || text === "/approve") {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can approve posts.");
-    const match = text.match(/^\/approve(?:@\w+)?\s+(\\d+)$/);
+    const match = text.match(/^\/approve(?:@\w+)?\s+(\d+)$/);
     if (!match) return reply(env, chatId, "Format: /approve TASK_ID");
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
@@ -388,7 +388,7 @@ async function handleUpdate(update, env) {
   }
   if (text.startsWith("/reject ") || text === "/reject") {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can reject posts.");
-    const match = text.match(/^\/reject(?:@\w+)?\s+(\\d+)\s*\\|\s*(.+)$/s);
+    const match = text.match(/^\/reject(?:@\w+)?\s+(\d+)\s*\|\s*(.+)$/s);
     if (!match) return reply(env, chatId, "Format: /reject TASK_ID | reason");
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
