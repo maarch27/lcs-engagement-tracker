@@ -134,10 +134,11 @@ async function handleUpdate(update, env) {
       data.flags.push(flag); await save(env, chatId, data);
       return reply(env, chatId, `⚠️ Your completion for task #${taskId} was flagged for admin review because the comment may be too short or generic. Please submit a specific, relevant comment. Likes and saves are still required.`);
     }
+    // Record the comment report, but explicitly ask members to confirm likes and saves too.
     data.completions = data.completions.filter(c => !(c.taskId === taskId && c.userId === user.id));
-    data.completions.push({ taskId, userId: user.id, name: nameOf(user), comment: comment.slice(0,500), at: dateNow() });
+    data.completions.push({ taskId, userId: user.id, name: nameOf(user), comment: comment.slice(0,500), likesConfirmed: false, saveConfirmed: false, at: dateNow() });
     await save(env, chatId, data);
-    return reply(env, chatId, `💗 Self-report recorded for task #${taskId}. Likes and saves cannot be independently verified.`);
+    return reply(env, chatId, `💗 Comment report recorded for task #${taskId}.\n\n⚠️ Before this task is fully self-reported, please make sure you have also liked and saved the Instagram post.\n\nThe bot cannot verify Instagram likes or saves directly, so this record is not proof that those actions were completed.`);
   }
   if (!["group", "supergroup"].includes(chat.type)) return;
   const links = text.match(IG_RE);
