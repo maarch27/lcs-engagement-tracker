@@ -388,6 +388,7 @@ async def nightly_review(context: ContextTypes.DEFAULT_TYPE):
     conn = connect_db()
     due_tasks = conn.execute("SELECT * FROM tasks WHERE due_at<=?", (iso(),)).fetchall()
     counts_by_chat = {}
+    private_messages = []
     for task in due_tasks:
         targets = conn.execute(
             "SELECT x.user_id,x.user_name FROM task_targets x "
@@ -404,13 +405,49 @@ async def nightly_review(context: ContextTypes.DEFAULT_TYPE):
             )
             if cur.rowcount:
                 counts_by_chat[task["chat_id"]] = counts_by_chat.get(task["chat_id"], 0) + 1
+                private_messages.append({
+                    "chat_id": task["chat_id"], "user_id": target["user_id"],
+                    "user_name": target["user_name"], "task_id": task["id"],
+                    "url": task["url"], "due_at": task["due_at"],
+                    "instruction": task["instruction"],
+                })
     conn.commit()
     conn.close()
+
+    # Telegram bots can only DM users who have opened the bot / pressed Start first.
+    dm_failed_by_chat = {}
+    for item in private_messages:
+        try:
+            await context.bot.send_message(
+                chat_id=item["user_id"],
+                text=(
+                    f"💗 LCS Engagement Tracker reminder\n\n"
+                    f"Task #{item['task_id']} is past its 24-hour deadline.\n"
+                    f"Link: {item['url']}\n"
+                    f"Instructions: {item['instruction']}\n\n"
+                    "Please check whether you completed all requested actions (like, save, and the requested comment). "
+                    "If you completed them, use /done TASK_ID | your comment in the engagement group. "
+                    "If you missed something, complete it if still possible and let an admin know.\n\n"
+                    "This is an automatic reminder because no completion report was found, not a verified accusation. "
+                    "The bot cannot independently verify Instagram likes or saves."
+                )
+            )
+        except Exception:
+            dm_failed_by_chat[item["chat_id"]] = dm_failed_by_chat.get(item["chat_id"], 0) + 1
+            log.info("Private reminder unavailable for user %s; they may need to start the bot first.", item["user_id"])
+
     for chat_id, count in counts_by_chat.items():
+        dm_failed = dm_failed_by_chat.get(chat_id, 0)
         try:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"🌙 Nightly check ({local_now.strftime('%H:%M')} Georgia time): {count} overdue task assignment(s) queued for admin review. No warning has been issued automatically. Admins: use /review."
+                text=(
+                    f"🌙 Nightly check ({local_now.strftime('%H:%M')} Georgia time): "
+                    f"{count} overdue task assignment(s) queued for admin review. "
+                    f"Private reminders sent where possible; {dm_failed} could not be delivered. "
+                    "These are missing completion reports, not verified proof of skipped likes/saves. "
+                    "Admins: use /review."
+                )
             )
         except Exception:
             log.exception("Could not post nightly review summary to %s", chat_id)
