@@ -240,10 +240,7 @@ async function handleUpdate(update, env) {
   const user = original.from;
   const text = original.text || original.caption || "";
   if (command === "/start" || command === "/help") {
-    if (isGroup) {
-      return reply(env, original.chat.id,
-        "💗 LCS Engagement Tracker is active here. Share an Instagram link in this group to create an engagement task. Use /tasks to see yours and /done TASK_ID | your comment to report completion.");
-    }
+    if (isGroup) return sendMenu(env, original.chat.id);
     return sendMenu(env, original.chat.id);
   }
   if (command === "/rules") {
@@ -466,9 +463,9 @@ async function trackMemberUpdate(update, env) {
     const name = htmlEscape(nameOf(member.user));
     await telegram(env, "sendMessage", {
       chat_id: chat.id,
-      text: "💗 Welcome " + name + " to our chat! Please read the pinned rules and follow all members within 24 hours.",
+      text: "💗 Welcome " + name + "! Welcome to our engagement chat. Use the menu below to get started.",
       parse_mode: "HTML",
-      reply_markup: { inline_keyboard: [[{ text: "📖 Read the rules privately", callback_data: "menu:rules" }]] },
+      reply_markup: menuKeyboard(),
     });
   }
 }
@@ -490,7 +487,7 @@ async function findMemberGroup(env, userId) {
 
 function menuKeyboard() {
   return { inline_keyboard: [
-    [{ text: "📌 Posts", callback_data: "menu:posts" }, { text: "📋 List", callback_data: "menu:list:0" }],
+    [{ text: "📌 Posts", callback_data: "menu:posts:0" }, { text: "📋 List", callback_data: "menu:list:0" }],
     [{ text: "👑 Admins", callback_data: "menu:admins" }, { text: "💬 Chats", callback_data: "menu:chats" }],
     [{ text: "💾 Saves", callback_data: "menu:saves" }, { text: "📖 Rules", callback_data: "menu:rules" }],
   ] };
@@ -515,10 +512,6 @@ async function handleMenuCallback(query, env) {
   await telegram(env, "answerCallbackQuery", { callback_query_id: query.id });
   if (!query.message || !userId) return;
   const chatId = query.message.chat.id;
-  if (query.message.chat.type !== "private") {
-    if (data === "menu:rules") return reply(env, userId, CHAT_RULES);
-    return;
-  }
   let body = "💗 LCS Engagement Tracker";
   let keyboard = menuKeyboard();
   if (data === "menu:rules") body = CHAT_RULES;
@@ -536,25 +529,41 @@ async function handleMenuCallback(query, env) {
     if (page > 0) nav.push({ text: "← Previous", callback_data: "menu:list:" + (page - 1) });
     if (start + pageSize < IG_MEMBERS.length) nav.push({ text: "Next →", callback_data: "menu:list:" + (page + 1) });
     keyboard = { inline_keyboard: [nav, [{ text: "🏠 Menu", callback_data: "menu:home" }]].filter(row => row.length) };
-  } else if (data === "menu:posts") {
-    let cursor;
+  } else if (data.startsWith("menu:posts")) {
+    const requestedPage = Math.max(0, Number(data.split(":")[2]) || 0);
     const tasks = [];
-    do {
-      const page = await env.LCS_DATA.list({ prefix: DB_PREFIX, cursor, limit: 100 });
-      for (const key of page.keys) {
-        const chatData = await loadChat(env, key.name.slice(DB_PREFIX.length));
-        for (const task of chatData.tasks || []) tasks.push(task);
-      }
-      cursor = page.list_complete ? undefined : page.cursor;
-    } while (cursor);
+    if (query.message.chat.type === "private") {
+      let cursor;
+      do {
+        const page = await env.LCS_DATA.list({ prefix: DB_PREFIX, cursor, limit: 100 });
+        for (const key of page.keys) {
+          const chatData = await loadChat(env, key.name.slice(DB_PREFIX.length));
+          for (const task of chatData.tasks || []) tasks.push(task);
+        }
+        cursor = page.list_complete ? undefined : page.cursor;
+      } while (cursor);
+    } else {
+      const chatData = await loadChat(env, chatId);
+      tasks.push(...(chatData.tasks || []));
+    }
     tasks.sort((a,b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    const rows = tasks.slice(0, 8);
-    body = rows.length
-      ? "📌 <b>Recent posts</b>\n\n" + rows.map(task =>
-        "Task #" + task.id + " · " + htmlEscape(task.posterName || "member") + " · " + htmlEscape(task.instruction) +
-        "\nDue: " + htmlEscape(task.dueAt) + "\n<a href=\"" + htmlEscape(task.url) + "\">Open Instagram post</a>").join("\n\n") +
-        "\n\nUse <code>/tasks</code> to see your assignments or <code>/done TASK_ID | your comment</code> to report completion."
-      : "📌 No Telegram post tasks have been recorded yet. Share an Instagram post link in the engagement group to create a task.";
+    const pageSize = 8;
+    const pageCount = Math.max(1, Math.ceil(tasks.length / pageSize));
+    const pageNumber = Math.min(requestedPage, pageCount - 1);
+    const rows = tasks.slice(pageNumber * pageSize, (pageNumber + 1) * pageSize);
+    if (rows.length) {
+      body = "📌 <b>Tracked posts</b> · page " + (pageNumber + 1) + "/" + pageCount + "\n\n" +
+        rows.map(task =>
+          "Task #" + task.id + " · " + htmlEscape(task.posterName || "member") + " · " + htmlEscape(task.instruction) +
+          "\nDue: " + htmlEscape(task.dueAt) + "\n<a href=\"" + htmlEscape(task.url) + "\">Open Instagram post</a>").join("\n\n") +
+          "\n\nUse <code>/tasks</code> for your assignments or <code>/done TASK_ID | your comment</code> to report completion.";
+      const nav = [];
+      if (pageNumber > 0) nav.push({ text: "← Previous", callback_data: "menu:posts:" + (pageNumber - 1) });
+      if (pageNumber + 1 < pageCount) nav.push({ text: "Next →", callback_data: "menu:posts:" + (pageNumber + 1) });
+      keyboard = { inline_keyboard: [nav, [{ text: "🏠 Menu", callback_data: "menu:home" }]].filter(row => row.length) };
+    } else {
+      body = "📌 No Telegram post tasks have been recorded yet. Share an Instagram link in this group to create a task.";
+    }
   } else if (data === "menu:chats") {
     let cursor;
     const chats = [];
@@ -564,7 +573,7 @@ async function handleMenuCallback(query, env) {
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
     body = chats.length
-      ? "💬 <b>Connected Telegram chats</b>\n" + chats.length + " chat(s) have tracker data. Use /tasks, /done or /report here in this private chat.\n\nPrivate invite links are not stored by the bot."
+      ? "💬 <b>Connected Telegram chats</b>\n" + chats.length + " chat(s) have tracker data. Use /tasks or /done in the chat where you posted the link.\n\nPrivate invite links are not stored by the bot."
       : "💬 No Telegram engagement chat has connected to the tracker yet.";
   } else if (data === "menu:saves") {
     body = "💾 <b>Saves Chat</b>\nPost your Sunday save links and #WARNING notices here. The bot cannot access your private Instagram Saved folder or verify screenshots automatically.";
