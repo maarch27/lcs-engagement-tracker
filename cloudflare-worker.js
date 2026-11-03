@@ -120,7 +120,7 @@ async function handleUpdate(update, env) {
     const warnings = await loadGlobal(env, "warnings", []);
     const memberRows = monthlyWarnings(warnings, user.id);
     const admin = await isAdmin(env, chatId, user.id, user.username);
-    if (!admin) return reply(env, chatId, `⚠️ Your warnings this month: ${memberRows.length}/5.${memberRows.length >= 5 ? "\\n‼️ Your posting limit is active until next month." : ""}`);
+    if (!admin) return reply(env, chatId, `⚠️ Your warnings this month: ${memberRows.length}/5.${memberRows.length >= 5 ? "\n‼️ Your posting limit is active until next month." : ""}`);
     const grouped = new Map();
     for (const w of warnings.filter(x => x.month === monthKey())) {
       const key = String(w.userId);
@@ -129,18 +129,18 @@ async function handleUpdate(update, env) {
       grouped.set(key, current);
     }
     const rows = [...grouped.entries()].sort((a,b) => b[1].count-a[1].count).slice(0,50);
-    return reply(env, chatId, rows.length ? "‼️ Monthly warnings (" + monthKey() + ")\\n\\n" + rows.map(([id, v]) => `${v.name} (ID ${id}): ${v.count}/5${v.count >= 5 ? " — POSTING LIMIT ACTIVE" : ""}`).join("\\n") : "No warnings this month 💗");
+    return reply(env, chatId, rows.length ? "‼️ Monthly warnings (" + monthKey() + ")\n\n" + rows.map(([id, v]) => `${v.name} (ID ${id}): ${v.count}/5${v.count >= 5 ? " — POSTING LIMIT ACTIVE" : ""}`).join("\n") : "No warnings this month 💗");
   }
   if (text.startsWith("/warn")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can issue warnings.");
     let target = msg.reply_to_message && msg.reply_to_message.from;
     let reason = "";
-    const match = text.match(/^\\/warn(?:@\\w+)?\\s+(\\d+)\\s*\\|\\s*(.+)$/s);
+    const match = text.match(/^\/warn(?:@\\w+)?\\s+(\\d+)\\s*\\|\\s*(.+)$/s);
     if (match) {
       target = { id: Number(match[1]), first_name: "Member" };
       reason = match[2].trim();
-    } else if (msg.reply_to_message && text.match(/^\\/warn(?:@\\w+)?(?:\\s+(.+))?$/s)) {
-      reason = (text.match(/^\\/warn(?:@\\w+)?(?:\\s+(.+))?$/s) || [,"No reason provided"])[1] || "No reason provided";
+    } else if (msg.reply_to_message && text.match(/^\/warn(?:@\\w+)?(?:\\s+(.+))?$/s)) {
+      reason = (text.match(/^\/warn(?:@\\w+)?(?:\\s+(.+))?$/s) || [,"No reason provided"])[1] || "No reason provided";
     } else {
       return reply(env, chatId, "Reply to a member's message with /warn reason, or use /warn USER_ID | reason.");
     }
@@ -151,7 +151,7 @@ async function handleUpdate(update, env) {
     warnings.push(warning);
     await saveGlobal(env, "warnings", warnings);
     const limitActive = count >= 5;
-    await sendPrivate(env, target.id, `‼️ Star Links warning ${count}/5 for ${monthKey()}\\nReason: ${warning.reason}${limitActive ? "\\n\\n⛔ Your posting limit is now active until the next calendar month. This is not a ban." : ""}`);
+    await sendPrivate(env, target.id, `‼️ Star Links warning ${count}/5 for ${monthKey()}\nReason: ${warning.reason}${limitActive ? "\n\n⛔ Your posting limit is now active until the next calendar month. This is not a ban." : ""}`);
     if (limitActive) {
       const limits = await loadGlobal(env, "limits", {});
       limits[String(target.id)] = { untilMonth: monthKey(), reason: "Reached 5 warnings in one calendar month", at: dateNow() };
@@ -161,7 +161,7 @@ async function handleUpdate(update, env) {
   }
   if (text.startsWith("/approvepost")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can approve early posts.");
-    const match = text.match(/^\\/approvepost(?:@\\w+)?\\s+(\\d+)$/);
+    const match = text.match(/^\/approvepost(?:@\\w+)?\\s+(\\d+)$/);
     if (!match) return reply(env, chatId, "Format: /approvepost USER_ID");
     const approvals = await loadGlobal(env, "postApprovals", {});
     approvals[String(match[1])] = { approvedBy: user.id, at: dateNow(), used: false };
@@ -172,7 +172,7 @@ async function handleUpdate(update, env) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "Only admins can review evidence.");
     const evidence = await loadGlobal(env, "evidence", []);
     const rows = evidence.slice(-15).reverse();
-    return reply(env, chatId, rows.length ? "📸 Recent evidence submissions (manual review)\\n\\n" + rows.map(e => `Evidence #${e.id} · ${e.name} (ID ${e.userId})\\nType: ${e.type} · ${e.at}\\n${e.caption || "No caption"}${e.fileId ? "\\nTelegram file ID saved" : ""}`).join("\\n\\n") : "No evidence submissions recorded yet.");
+    return reply(env, chatId, rows.length ? "📸 Recent evidence submissions (manual review)\n\n" + rows.map(e => `Evidence #${e.id} · ${e.name} (ID ${e.userId})\nType: ${e.type} · ${e.at}\n${e.caption || "No caption"}${e.fileId ? "\nTelegram file ID saved" : ""}`).join("\n\n") : "No evidence submissions recorded yet.");
   }
   // Save-chat evidence mode: record incoming images/videos/documents without cluttering the chat with bot replies.
   if (savesChat(env, chatId) && (msg.photo || msg.video || msg.document || msg.animation || msg.video_note)) {
