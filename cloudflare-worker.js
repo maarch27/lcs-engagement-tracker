@@ -378,6 +378,7 @@ async function handleUpdate(update, env) {
     task.status = "approved";
     task.reviewedAt = dateNow();
     task.reviewedBy = user.id;
+    task.deadline = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await save(env, dataChatId, data);
     const botUsername = await loadGlobal(env, "botUsername", "");
     const postText = "✅ APPROVED INSTAGRAM POST\nPosted by: " + task.posterName + "\nTask ID: #" + task.id + "\n" + task.url + "\nPlease engage within 24 hours: like, save, and leave a meaningful comment.";
@@ -574,6 +575,7 @@ async function handleUpdate(update, env) {
   const note = `🕵️ Your Instagram post has been received and queued for review.\n\n${canonicalLinks[0]}\nPosted by: ${displayUser(user)}\nTask ID: ${ids.join(", ")}\n\n⏳ Review estimate: 3–5 minutes. This is an estimate, not a guarantee; an admin may need to review it manually.\n\nIf approved, the bot will publish it in Star Links and notify you here. If it is rejected, the bot will send the reason privately. Until approval, it will not appear in members’ assigned Posts list.\n\nYou may submit another post after: ${formatGeorgian(latestTask.deadline)}\nThe bot validates the link format and records the submission; it cannot independently verify Instagram engagement or content availability.`;
   const botUsername = await loadGlobal(env, "botUsername", "");
   await reply(env, chatId, "🕵️ Post received for review. Estimated review time: 3–5 minutes. It will be published to the group only after approval. The bot cannot independently verify Instagram engagement.", msg.message_id);
+  if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "🕵️ NEW POST AWAITING REVIEW\nMember: " + displayUser(user) + " (ID " + user.id + ")\nTask: " + ids.join(", ") + "\n" + canonicalLinks.join("\n") + "\nReview with /reviewposts, then /approve TASK_ID or /reject TASK_ID | reason.");
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
   if (!dm.ok) {
     console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
