@@ -90,17 +90,44 @@ async function handleUpdate(update, env) {
   const text = msg.text || msg.caption || "";
   if (text.startsWith("/start") || text.startsWith("/help")) {
     return reply(env, chatId,
-      "💗 Welcome to the LCS Engagement Tracker!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view your engagement tasks\n/rules — read the community rules\n/done TASK_ID | your comment — report your comment\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n\n💌 NEED HELP?\nMembers and admins can contact the admin team: @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nPlease remember to like, save, and leave a meaningful comment on each assigned post. 💗");
+      "💗 Welcome to the LCS Engagement Tracker!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view your engagement tasks\n/rules — read the community rules\n/done TASK_ID | your comment — report your comment\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n/tracked — privately view tracked posts (admins)\n/remove TASK_ID — stop tracking a post (admins)\n\n💌 NEED HELP?\nMembers and admins can contact the admin team: @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nPlease remember to like, save, and leave a meaningful comment on each assigned post. 💗");
   }
   if (text.startsWith("/rules")) {
     return reply(env, chatId,
       "💗 LCS engagement rules\n1. Like and save each assigned post.\n2. Leave a genuine, relevant comment following the post instructions.\n3. If no special instruction is given, leave a meaningful comment.\n4. Emoji-only comments are acceptable only when explicitly requested.\n5. Avoid generic comments.\n6. Report with /done TASK_ID | your comment.\n\nCompletion is self-reported; likes/saves cannot be independently verified. Admins review flags manually.");
   }
+  if (text.startsWith("/tracked") || text.startsWith("/remove")) {
+    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
+    const data = await load(env, chatId);
+    if (text.startsWith("/remove")) {
+      const match = text.match(/^\/remove(?:@\w+)?\s+(\d+)$/);
+      if (!match) return reply(env, chatId, "Format: /remove TASK_ID");
+      const taskId = Number(match[1]);
+      const index = data.tasks.findIndex(t => t.id === taskId);
+      if (index < 0) return reply(env, chatId, `I couldn't find task #${taskId}.`);
+      const removed = data.tasks.splice(index, 1)[0];
+      data.completions = data.completions.filter(c => c.taskId !== taskId);
+      await save(env, chatId, data);
+      const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: `🗑 Task #${taskId} has been removed from tracking.\nPost: ${removed.url}`, disable_web_page_preview: true });
+      if (!dm.ok) return reply(env, chatId, "Task removed, but I couldn't DM you. Please start the bot privately with /start.");
+      return reply(env, chatId, `✅ Task #${taskId} removed. Details sent to your bot chat.`);
+    }
+    const rows = data.tasks.slice(-30).reverse();
+    const report = rows.length
+      ? "📌 Tracked posts · latest 30\n\n" + rows.map(t => {
+          const done = data.completions.filter(x => x.taskId === t.id);
+          return `Task #${t.id} · ${t.posterName} · ${t.instruction}\nDue: ${t.deadline ? formatGeorgian(t.deadline) : "Not set"}\nReports: ${done.length}\n${t.url}`;
+        }).join("\n\n") + "\n\nAdmin control: use /remove TASK_ID in the group to stop tracking a post."
+      : "📌 No tracked posts yet.";
+    const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: report, disable_web_page_preview: true });
+    if (!dm.ok) return reply(env, chatId, "I couldn't send the tracked-post list privately. Open the bot and send /start first, then run /tracked again in the group.");
+    return reply(env, chatId, "📩 I sent the tracked-post list to your private bot chat.");
+  }
   if (text.startsWith("/admin") || text.startsWith("/report") || text.startsWith("/flags")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
     const data = await load(env, chatId);
     if (text.startsWith("/admin")) return reply(env, chatId,
-      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n\nTrusted admins (@marriaammi, @Lizal, @itsimplymartha, @drlamarya) and native Telegram group admins can post freely. The bot never auto-deletes admin messages or auto-bans members. Flags are review prompts, not proof. Instagram likes/saves are not independently verified.");
+      "🛠 Admin controls\n/report — daily task and completion summary\n/flags — latest 20 flags for manual review\n/tracked — privately view tracked posts\n/remove TASK_ID — remove a tracked post\n\nTrusted admins (@marriaammi, @Lizal, @itsimplymartha, @drlamarya) and native Telegram group admins can post freely. The bot never auto-deletes admin messages or auto-bans members. Flags are review prompts, not proof. Instagram likes/saves are not independently verified.");
     if (text.startsWith("/flags")) {
       const rows = data.flags.slice(-20).reverse();
       return reply(env, chatId, rows.length ? "🔎 Recent flags (manual review):\n\n" + rows.map(f => `Flag #${f.id} · ${f.name}\n${f.reason}\n${f.at}`).join("\n\n") + "\n\nNo automatic bans are applied." : "No flagged comments to review 💗");
