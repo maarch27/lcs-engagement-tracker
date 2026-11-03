@@ -239,9 +239,14 @@ async function handleUpdate(update, env) {
   const chat = msg.chat;
   const user = original.from;
   const text = original.text || original.caption || "";
+  if (isGroup && original.from) {
+    const knownGroupData = await loadChat(env, original.chat.id);
+    if (rememberMember(knownGroupData, original.chat.id, original.from)) await saveChat(env, original.chat.id, knownGroupData);
+  }
+  const persistentMenuAction = isGroup ? PERSISTENT_MENU_ACTIONS[text] : null;
+  if (persistentMenuAction) return handlePersistentMenu(env, original.chat, persistentMenuAction);
   if (command === "/start" || command === "/help") {
-    if (isGroup) return sendMenu(env, original.chat.id);
-    return sendMenu(env, original.chat.id);
+    return sendMenu(env, original.chat.id, isGroup);
   }
   if (command === "/rules") {
     return reply(env, original.chat.id, CHAT_RULES);
@@ -464,7 +469,7 @@ async function trackMemberUpdate(update, env) {
       chat_id: chat.id,
       text: "💗 Welcome " + name + "! Welcome to our engagement chat. Use the menu below to get started.",
       parse_mode: "HTML",
-      reply_markup: menuKeyboard(),
+      reply_markup: persistentMenuKeyboard(),
     });
   }
 }
@@ -492,12 +497,94 @@ function menuKeyboard() {
   ] };
 }
 
-async function sendMenu(env, chatId) {
+const PERSISTENT_MENU_ACTIONS = {
+  "📌 Posts": "posts",
+  "👥 Members": "members",
+  "👑 Admins": "admins",
+  "💬 Chats": "chats",
+  "💾 Saves": "saves",
+  "📖 Rules": "rules",
+};
+
+function persistentMenuKeyboard() {
+  return {
+    keyboard: [
+      [{ text: "📌 Posts" }, { text: "👥 Members" }],
+      [{ text: "👑 Admins" }, { text: "💬 Chats" }],
+      [{ text: "💾 Saves" }, { text: "📖 Rules" }],
+    ],
+    is_persistent: true,
+    resize_keyboard: true,
+    input_field_placeholder: "Choose a section",
+  };
+}
+
+async function sendMenu(env, chatId, isGroup = false) {
   return telegram(env, "sendMessage", {
     chat_id: chatId,
-    text: "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
-    reply_markup: menuKeyboard(),
+    text: "💗 Welcome to the LCS Engagement Tracker!\\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.",
+    reply_markup: isGroup ? persistentMenuKeyboard() : menuKeyboard(),
     disable_web_page_preview: true,
+  });
+}
+
+function menuPageButtons(action, page, pageCount) {
+  const nav = [];
+  if (page > 0) nav.push({ text: "← Previous", callback_data: "menu:" + action + ":" + (page - 1) });
+  if (page + 1 < pageCount) nav.push({ text: "Next →", callback_data: "menu:" + action + ":" + (page + 1) });
+  return { inline_keyboard: [nav, [{ text: "🏠 Menu", callback_data: "menu:home" }]].filter(row => row.length) };
+}
+
+async function handlePersistentMenu(env, chat, action) {
+  let text;
+  let replyMarkup = menuKeyboard();
+
+  if (action === "rules") {
+    text = CHAT_RULES;
+  } else if (action === "admins") {
+    text = "👑 <b>Admins — follow or message</b>\\n" + IG_ADMINS.map(([name, url, telegramUsername]) =>
+      "• <a href=\\\"" + url + "\\\">@"+ htmlEscape(name) + "</a> · <a href=\\\"https://t.me/" + telegramUsername + "\\\">Message on Telegram</a>"
+    ).join("\\n") + "\\n\\nUse the Instagram link to follow an admin, or the Telegram link to contact them.";
+  } else if (action === "members") {
+    const page = 0;
+    const pageSize = 10;
+    const rows = IG_MEMBERS.slice(0, pageSize);
+    const pageCount = Math.max(1, Math.ceil(IG_MEMBERS.length / pageSize));
+    text = rows.length
+      ? "👥 <b>Members to follow</b> · page 1/" + pageCount + "\\n\\n" + rows.map(([name, url]) => "• <a href=\\\"" + url + "\\\">@"+ htmlEscape(name) + "</a>").join("\\n")
+      : "👥 No member links are listed yet.";
+    replyMarkup = menuPageButtons("list", page, pageCount);
+  } else if (action === "posts") {
+    const data = await loadChat(env, chat.id);
+    const tasks = [...(data.tasks || [])].sort((a,b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const pageSize = 8;
+    const pageCount = Math.max(1, Math.ceil(tasks.length / pageSize));
+    const rows = tasks.slice(0, pageSize);
+    text = rows.length
+      ? "📌 <b>Tracked posts</b> · page 1/" + pageCount + "\\n\\n" + rows.map(task =>
+          "Task #" + task.id + " · " + htmlEscape(task.posterName || "member") + " · " + htmlEscape(task.instruction) +
+          "\\nDue: " + htmlEscape(task.dueAt) + "\\n<a href=\\\"" + htmlEscape(task.url) + "\\\">Open Instagram post</a>"
+        ).join("\\n\\n") + "\\n\\nUse /tasks to see your assignments or /done TASK_ID | your comment to report completion."
+      : "📌 No tasks yet. The bot starts tracking new Instagram links posted here; older messages from before setup are not imported.";
+    replyMarkup = menuPageButtons("posts", 0, pageCount);
+  } else if (action === "chats") {
+    text = "💬 <b>Tracker menu</b>\\nThis group is connected. Use Posts to see tracked links, Members to open Instagram profiles, and Admins to contact an admin.";
+  } else if (action === "saves") {
+    text = "💾 <b>Saves Chat</b>\\nPost Sunday save links and #WARNING notices in the Saves chat. Likes and saves cannot be checked directly by the bot.";
+    replyMarkup = {
+      inline_keyboard: [
+        ...(env.SAVES_CHAT_INVITE_URL ? [[{ text: "💾 Open Saves Chat", url: env.SAVES_CHAT_INVITE_URL }]] : []),
+        [{ text: "🏠 Menu", callback_data: "menu:home" }],
+      ],
+    };
+  }
+
+  return telegram(env, "sendMessage", {
+    chat_id: chat.id,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: replyMarkup,
   });
 }
 
