@@ -332,12 +332,12 @@ async function handleUpdate(update, env) {
       const privateMenu = [
         [{ text: "📸 Post", url: botUrl + "?start=post" }, { text: "📋 Posts", url: botUrl + "?start=posts" }],
         [{ text: "👥 Members", url: botUrl + "?start=members" }, { text: "👩🏻‍💼 Admin", url: botUrl + "?start=admins" }],
-        [{ text: "💾 Saves", url: "https://t.me/+zvH-bkE_ZT45NTli" }, { text: "⚠️ Warnings", url: botUrl + "?start=warnings" }],
+        [{ text: "💾 Saves & ⚠️ Warnings", url: "https://t.me/+zvH-bkE_ZT45NTli" }],
         [{ text: "📜 Rules", url: botUrl + "?start=rules" }]
       ];
       return telegram(env, "sendMessage", {
         chat_id: chatId,
-        text: "💗 STAR LINKS\\n\\nChoose a section below.\\n\\n📸 Post — submit your Instagram link privately.\\n📋 Posts — assigned engagement links and deadlines.\\n👥 Members — community Instagram profile directory.\\n👩🏻‍💼 Admin — contact moderators.\\n💾 Saves — weekly evidence group.\\n⚠️ Warnings — reports and moderation.\\n📜 Rules — community guidelines.",
+        text: "💗 STAR LINKS\\n\\nChoose a section below.\\n\\n📸 Post — submit your Instagram link privately.\\n📋 Posts — assigned engagement links and deadlines.\\n👥 Members — community Instagram profile directory.\\n👩🏻‍💼 Admin — contact moderators.\\n💾 Saves & Warnings — weekly evidence and reports.\\n📜 Rules — community guidelines.",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: privateMenu }
       });
@@ -345,13 +345,13 @@ async function handleUpdate(update, env) {
     if (savesChat(env, chatId)) return reply(env, chatId, "📸 STAR SAVES — WEEKLY EVIDENCE CHAT\n\nPost the Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\n🗓️ Open: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time. The bot will remind members during the window and send a weekly report to the admin Warnings chat.\n\nUse #WARNING with a member username or reply to their message to flag an issue for admin review. Use #IMBACK when returning and then catch up on outstanding Posts in the private bot. Tags are recorded for review; they do not automatically issue warnings.");
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
-    const menuText = "💗 STAR LINKS\\n\\nChoose a section below.\\n\\n📸 Post: submit your Instagram link privately for review.\\n📋 Posts: assigned engagement links and deadlines.\\n👥 Members: community Instagram profile directory.\\n👩🏻‍💼 Admin: moderator contacts.\\n💾 Saves: weekly evidence group.\\n⚠️ Warnings: reports and moderation.\\n📜 Rules: community guidelines.";
+    const menuText = "💗 STAR LINKS\\n\\nChoose a section below.\\n\\n📸 Post: submit your Instagram link privately for review.\\n📋 Posts: assigned engagement links and deadlines.\\n👥 Members: community Instagram profile directory.\\n👩🏻‍💼 Admin: moderator contacts.\\n💾 Saves & Warnings: weekly evidence and reports.\\n📜 Rules: community guidelines.";
     if (botUsername && String(chatId) === String(env.LINK_CHAT_ID)) {
       const botUrl = "https://t.me/" + botUsername;
       const rows = [
         [{ text: "📸 Post", url: botUrl + "?start=post" }, { text: "📋 Posts", url: botUrl + "?start=posts" }],
         [{ text: "👥 Members", url: botUrl + "?start=members" }, { text: "👩🏻‍💼 Admin", url: botUrl + "?start=admins" }],
-        [{ text: "💾 Saves", url: "https://t.me/+zvH-bkE_ZT45NTli" }, { text: "⚠️ Warnings", url: botUrl + "?start=warnings" }],
+        [{ text: "💾 Saves & ⚠️ Warnings", url: "https://t.me/+zvH-bkE_ZT45NTli" }],
         [{ text: "📜 Rules", url: botUrl + "?start=rules" }]
       ];
       return telegram(env, "sendMessage", {
@@ -482,7 +482,7 @@ async function handleUpdate(update, env) {
     const rows = botUsername ? [
       [{ text: "📸 Post", url: botUrl + "?start=post" }, { text: "📋 Posts", url: botUrl + "?start=posts" }],
       [{ text: "👥 Members", url: botUrl + "?start=members" }, { text: "👩🏻‍💼 Admin", url: botUrl + "?start=admins" }],
-      [{ text: "💾 Saves", url: "https://t.me/+zvH-bkE_ZT45NTli" }, { text: "⚠️ Warnings", url: botUrl + "?start=warnings" }],
+      [{ text: "💾 Saves & ⚠️ Warnings", url: "https://t.me/+zvH-bkE_ZT45NTli" }],
       [{ text: "📜 Rules", url: botUrl + "?start=rules" }]
     ] : [];
     const keyboard = rows.length ? { reply_markup: { inline_keyboard: rows } } : {};
