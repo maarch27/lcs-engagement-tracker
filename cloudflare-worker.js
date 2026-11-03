@@ -26,7 +26,22 @@ export default {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: webhookUrl, secret_token: env.WEBHOOK_SECRET, allowed_updates: ["message", "edited_message"] })
       });
-      return new Response(await result.text(), { status: result.status, headers: { "content-type": "application/json" } });
+      const menuResult = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          commands: [
+            { command: "start", description: "Open your Star Links welcome menu" },
+            { command: "tasks", description: "View posts you still need to engage with" },
+            { command: "done", description: "Report your comment: /done TASK_ID | comment" },
+            { command: "confirm", description: "Confirm you liked and saved a post" },
+            { command: "warnings", description: "Check your warning count" },
+            { command: "rules", description: "Read the engagement rules" },
+            { command: "help", description: "Open help and menu" }
+          ],
+          scope: { type: "all_private_chats" }
+        })
+      });
+      return new Response(JSON.stringify({ webhook: await result.json(), privateMenu: await menuResult.json() }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (request.method !== "POST") return new Response("Star Links Engagement Tracker webhook is ready.");
     const secret = env.WEBHOOK_SECRET;
@@ -186,6 +201,7 @@ async function handleUpdate(update, env) {
   const msg = update.message || update.edited_message;
   if (!msg || !msg.chat) return;
   const chat = msg.chat, user = msg.from;
+  if (user && user.is_bot) return;
   const chatId = chat.id;
   const text = msg.text || msg.caption || "";
   if (["group", "supergroup"].includes(chat.type) && user && !user.is_bot) {
