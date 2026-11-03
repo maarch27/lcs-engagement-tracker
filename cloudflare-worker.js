@@ -294,7 +294,7 @@ async function handleUpdate(update, env) {
     const match = text.match(/^\/check(?:@\w+)?\s+(\d+)$/);
     if (!match) return reply(env, chatId, "Format: /check TASK_ID");
     const taskId = Number(match[1]);
-    const data = await load(env, chatId);
+    const data = await load(env, taskChatIdFor(chat, env));
     const task = data.tasks.find(t => t.id === taskId);
     if (!task) return reply(env, chatId, `I couldn't find task #${taskId} in this chat.`);
     const people = (data.participants || []).filter(p => String(p.userId) !== String(task.posterId));
@@ -405,7 +405,7 @@ async function handleUpdate(update, env) {
   }
   if (text.startsWith("/tracked") || text.startsWith("/remove")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
-    const data = await load(env, chatId);
+    const data = await load(env, taskChatIdFor(chat, env));
     if (text.startsWith("/remove")) {
       const match = text.match(/^\/remove(?:@\w+)?\s+(\d+)$/);
       if (!match) return reply(env, chatId, "Format: /remove TASK_ID");
