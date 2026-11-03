@@ -57,3 +57,16 @@ When a task assignment reaches its 24-hour deadline without a completion report,
 Telegram bots cannot initiate a private conversation with a member who has never opened the bot. Each member should open the bot's profile and press Start once to enable private reminders. If that member has not started the bot, the bot records that the private message could not be delivered; admins can still see the task in /review.
 
 These reminders are based on missing completion reports, not direct proof that an Instagram like/save was skipped. The bot cannot read arbitrary Instagram users' likes and saves.
+
+
+## Additional commands and final-warning destinations
+
+- `/review_done` — list up to 30 recent completion comments in the current group.
+- `/edit_done TASK_ID USER_ID | corrected comment` — admin-only correction; the old and new comments, editor, and edit time are recorded.
+- `/finalwarn @username reason --to=private` — private delivery (default if no destination is specified).
+- `/finalwarn @username reason --to=group` — post the final warning in the group where the command is run.
+- `/finalwarn @username reason --to=log` — send to the configured `FINAL_WARNING_CHAT_ID` admin log chat.
+
+A bot cannot post directly to your personal Telegram Saved Messages. To keep warning records in a separate chat, create an admin-only Telegram group, add the bot, configure `FINAL_WARNING_CHAT_ID`, and ensure the bot can send messages there. Public warning posts can disclose moderation details; test this behavior and use group delivery only when intended.
+
+The GitHub changes are not deployment or runtime verification. Run syntax and integration tests with a separate test bot/token and a test group before switching the production bot.
