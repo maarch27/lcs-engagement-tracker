@@ -48,8 +48,6 @@ async function handleSetup(url, env) {
   if (existingUrl === workerUrl) return json({ ok: true, alreadyConfigured: true, urlHost: safeHost(existingUrl) });
   const setResponse = await telegramApi(env, "setWebhook", {
     url: workerUrl,
-    // Pin Cloudflare's workers.dev anycast IPv4 so Telegram can skip DNS lookup.
-    ip_address: "188.114.96.2",
     secret_token: env.WEBHOOK_SECRET,
     allowed_updates: ["message", "chat_member"],
   });
