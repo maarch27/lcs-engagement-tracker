@@ -35,6 +35,7 @@ export default {
           commands: [
             { command: "start", description: "Open your Star Links welcome menu" },
             { command: "menu", description: "Show the Star Links menu again" },
+            { command: "admin", description: "Open the admin controls (authorized admins only)" },
             { command: "posts", description: "Open posts assigned to you" },
             { command: "tasks", description: "View posts you still need to engage with" },
             { command: "done", description: "Report your comment: /done TASK_ID | comment" },
