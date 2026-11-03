@@ -2,6 +2,7 @@ const TRUSTED_ADMIN_USERNAMES = new Set(["marriaammi", "lizal", "itsimplymartha"
 const GENERIC_COMMENTS = new Set(["nice", "nice post", "love it", "i like this product", "great", "great post", "so cute", "amazing", "beautiful", "love this"]);
 const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 const DB_PREFIX = "chat:";
+const SAVES_CHAT_ID = "-3760298679";
 
 const IG_ADMINS = [
   ["maarch_27", "https://www.instagram.com/maarch_27/"],
@@ -422,7 +423,10 @@ async function reviewDecision(env, msg, command) {
   data.warnings.push({ userId, userName: item.userName, level, reason, issuedAt: item.reviewedAt, issuedBy: nameOf(msg.from) });
   await saveChat(env, msg.chat.id, data);
   const notice = level === 1 ? "⚠️ First warning" : (level === 2 ? "⚠️ Second warning — repeated missed deadlines are being recorded." : "🚨 FINAL WARNING — further missed deadlines may lead to removal after admin review.");
-  return reply(env, msg.replyChatId || msg.chat.id, notice + "\nMember: " + item.userName + "\n" + reason);
+  const warningText = notice + "\nMember: " + item.userName + "\n" + reason;
+  const posted = await telegram(env, "sendMessage", { chat_id: SAVES_CHAT_ID, text: warningText, disable_web_page_preview: true });
+  if (!posted.data?.ok) return reply(env, msg.replyChatId || msg.chat.id, "Warning was recorded, but I could not post it in the Saves chat. Check that I’m still in that chat.");
+  return reply(env, msg.replyChatId || msg.chat.id, "Warning recorded and posted in the Saves chat.");
 }
 
 async function issueManualWarning(env, msg, isFinal) {
@@ -441,7 +445,10 @@ async function issueManualWarning(env, msg, isFinal) {
   data.warnings.push({ userId, userName, level, reason, issuedAt: new Date().toISOString(), issuedBy: nameOf(msg.from) });
   await saveChat(env, msg.chat.id, data);
   const notice = level === 3 ? "🚨 FINAL WARNING" : (level === 2 ? "⚠️ Second warning" : "⚠️ First warning");
-  return reply(env, msg.replyChatId || msg.chat.id, notice + "\nMember: " + userName + "\nReason: " + reason);
+  const warningText = notice + "\nMember: " + userName + "\nReason: " + reason;
+  const posted = await telegram(env, "sendMessage", { chat_id: SAVES_CHAT_ID, text: warningText, disable_web_page_preview: true });
+  if (!posted.data?.ok) return reply(env, msg.replyChatId || msg.chat.id, "Warning was recorded, but I could not post it in the Saves chat. Check that I’m still in that chat.");
+  return reply(env, msg.replyChatId || msg.chat.id, "Warning recorded and posted in the Saves chat.");
 }
 
 async function trackMemberUpdate(update, env) {
@@ -557,7 +564,13 @@ async function handleMenuCallback(query, env) {
       ? "💬 <b>Connected Telegram chats</b>\n" + chats.length + " chat(s) have tracker data. Use /tasks, /done or /report here in this private chat.\n\nPrivate invite links are not stored by the bot."
       : "💬 No Telegram engagement chat has connected to the tracker yet.";
   } else if (data === "menu:saves") {
-    body = "💾 <b>Saves</b>\nSaves are posted only on Sundays under your rules. Instagram does not let this bot read anyone’s private Saved folder, so the bot cannot verify a save. Please follow the group’s save-link process and use /done for your self-report.";
+    body = "💾 <b>Saves Chat</b>\nPost your Sunday save links and #WARNING notices here. The bot cannot access your private Instagram Saved folder or verify screenshots automatically.";
+    keyboard = {
+      inline_keyboard: [
+        ...(env.SAVES_CHAT_INVITE_URL ? [[{ text: "💾 Open Saves Chat", url: env.SAVES_CHAT_INVITE_URL }]] : []),
+        [{ text: "🏠 Menu", callback_data: "menu:home" }],
+      ],
+    };
   } else if (data === "menu:home") {
     body = "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below. Posts here show Telegram-tracked links; Instagram likes and saves cannot be checked directly by the bot.";
   }
@@ -570,14 +583,18 @@ async function handleMenuCallback(query, env) {
   }
 }
 
-function georgiaHour(date) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tbilisi", hour: "2-digit", hourCycle: "h23" }).formatToParts(date);
-  return Number(parts.find(part => part.type === "hour")?.value);
+function parisLocalTime(date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Paris", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(date);
+  const value = type => parts.find(part => part.type === type)?.value;
+  return { weekday: value("weekday"), hour: Number(value("hour")), minute: Number(value("minute")) };
 }
 
 async function nightlyReview(env) {
   const now = new Date();
-  if (georgiaHour(now) !== 20) return;
+  const paris = parisLocalTime(now);
+  if (paris.hour !== 20 || paris.minute !== 0) return;
   let cursor;
   do {
     const page = await env.LCS_DATA.list({ prefix: DB_PREFIX, cursor, limit: 100 });
