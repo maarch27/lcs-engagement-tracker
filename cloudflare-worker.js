@@ -230,7 +230,7 @@ async function handleUpdate(update, env) {
   const isGroup = original.chat.type === "group" || original.chat.type === "supergroup";
   const command = commandOf(original.text || original.caption || "");
   let msg = original;
-  if (isGroup && original.from) msg = { ...original, replyChatId: original.from.id };
+  if (isGroup && original.from) msg = { ...original, replyChatId: original.chat.id };
   if (!isGroup && original.chat.type === "private" && command && !["/start", "/help"].includes(command)) {
     const groupId = await findMemberGroup(env, original.from?.id);
     if (!groupId) return reply(env, original.chat.id, "Open the engagement group and send any message first so I can connect your private menu.");
@@ -240,7 +240,10 @@ async function handleUpdate(update, env) {
   const user = original.from;
   const text = original.text || original.caption || "";
   if (command === "/start" || command === "/help") {
-    if (isGroup) return;
+    if (isGroup) {
+      return reply(env, original.chat.id,
+        "💗 LCS Engagement Tracker is active here. Share an Instagram link in this group to create an engagement task. Use /tasks to see yours and /done TASK_ID | your comment to report completion.");
+    }
     return sendMenu(env, original.chat.id);
   }
   if (command === "/rules") {
