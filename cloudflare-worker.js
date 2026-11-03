@@ -158,7 +158,7 @@ async function sendWeeklyEvidenceReport(env, scheduledTime = new Date()) {
     current.types.add(item.type || "evidence");
     byMember.set(key, current);
   }
-  const observed = roster.participants || [];
+  const observed = (roster.participants || []).filter(p => p.seenAt && georgianDateKey(new Date(p.seenAt)) === sundayKey);
   const missing = observed.filter(p => !byMember.has(String(p.userId)));
   const submissions = [...byMember.entries()].sort((a,b) => b[1].count-a[1].count).map(([id, v]) => `• ${v.name} (ID ${id}): ${v.count} submission(s) — ${[...v.types].join(", ")}`);
   const missingText = missing.length ? missing.map(p => `• ${p.name} (ID ${p.userId})`).join("\n") : "No known Saves-chat participants were missing submissions.";
@@ -177,7 +177,7 @@ async function handleUpdate(update, env) {
     if (!roster.participants.some(p => String(p.userId) === String(user.id))) {
       roster.participants.push({ userId: user.id, name: nameOf(user), username: user.username || "", seenAt: dateNow() });
       await save(env, chatId, roster);
-    } else if (!roster.participants.some(p => String(p.userId) === String(user.id) && p.name === nameOf(user))) {
+    } else {
       roster.participants = roster.participants.map(p => String(p.userId) === String(user.id) ? { ...p, name: nameOf(user), username: user.username || "", seenAt: dateNow() } : p);
       await save(env, chatId, roster);
     }
