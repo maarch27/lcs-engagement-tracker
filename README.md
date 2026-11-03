@@ -26,6 +26,11 @@ The `cloudflare-worker.js` file is the webhook-based version intended for Cloudf
 4. Copy the deployed Worker URL. Open `<WORKER_URL>/setup?key=<SETUP_KEY>` once, replacing the placeholders locally. The response should show Telegram's `"ok": true`. Do not share the setup URL. Then remove the `SETUP_KEY` secret from Worker settings so the setup route can no longer be used.
 5. Add the bot to your Telegram group. To read ordinary group messages and Instagram links, open @BotFather, use `/setprivacy`, select the bot, choose **Disable**, and remove/re-add the bot to the group if needed. Grant the bot the group access it needs.
 6. Test `/start`, `/admin`, `/tasks`, and `/report` in the group.
+7. In the Worker **Settings → Triggers → Cron Triggers**, configure all three schedules below. Cloudflare cron expressions run in UTC:
+   - `0 * * * *` — hourly task reminders (12-hour, 4-hour, 1-hour, and overdue reminders) and the Sunday midday Saves reminder.
+   - `0 20 * * SAT` — opens Star Saves at Sunday 00:00 Georgia time and posts the opening instructions.
+   - `0 20 * * SUN` — closes Star Saves at Monday 00:00 Georgia time and sends the weekly evidence report to the Warnings chat.
+   These reminders do not run until the cron triggers are configured and the Worker version is deployed.
 
 ### Important limitations
 
