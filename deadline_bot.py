@@ -189,6 +189,76 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.reply_text(f"💗 Self-report recorded for task #{task_id}. This does not independently verify the Instagram like or save.")
 
 
+async def review_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.effective_message.reply_text("Admin-only command.")
+        return
+    chat = update.effective_chat
+    conn = connect_db()
+    rows = conn.execute(
+        "SELECT c.task_id,c.user_id,c.user_name,c.comment_text,c.completed_at,t.url "
+        "FROM completions c JOIN tasks t ON t.id=c.task_id "
+        "WHERE t.chat_id=? ORDER BY c.completed_at DESC LIMIT 30",
+        (chat.id,),
+    ).fetchall()
+    conn.close()
+    if not rows:
+        await update.effective_message.reply_text("No completion comments have been submitted yet.")
+        return
+    lines = ["📝 Recent completion comments (latest 30):"]
+    for r in rows:
+        lines.append(
+            f"Task #{r['task_id']} · {r['user_name']} (ID {r['user_id']})\n"
+            f"Comment: {r['comment_text']}\n"
+            f"Edit: /edit_done {r['task_id']} {r['user_id']} | corrected comment\n"
+            f"Link: {r['url']}"
+        )
+    await update.effective_message.reply_text("\n\n".join(lines))
+
+
+async def edit_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update, context):
+        await update.effective_message.reply_text("Admin-only command.")
+        return
+    msg, chat = update.effective_message, update.effective_chat
+    match = re.match(r"^/edit_done(?:@\w+)?\s+(\d+)\s+(\d+)\s*\|\s*(.+)$", msg.text or "", re.S)
+    if not match:
+        await msg.reply_text("Format: /edit_done TASK_ID USER_ID | corrected comment")
+        return
+    task_id, user_id, comment = int(match.group(1)), int(match.group(2)), match.group(3).strip()
+    if len(comment) > 500:
+        await msg.reply_text("Comments must be 500 characters or fewer.")
+        return
+    conn = connect_db()
+    row = conn.execute(
+        "SELECT c.comment_text FROM completions c JOIN tasks t ON t.id=c.task_id "
+        "WHERE c.task_id=? AND c.user_id=? AND t.chat_id=?",
+        (task_id, user_id, chat.id),
+    ).fetchone()
+    if not row:
+        conn.close()
+        await msg.reply_text("No submitted completion comment found for that task and member.")
+        return
+    old_comment = row["comment_text"]
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS completion_edits (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+          old_comment TEXT NOT NULL, new_comment TEXT NOT NULL, edited_by TEXT NOT NULL, edited_at TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "INSERT INTO completion_edits(task_id,user_id,old_comment,new_comment,edited_by,edited_at) VALUES(?,?,?,?,?,?)",
+        (task_id, user_id, old_comment, comment[:500], display_name(update.effective_user), iso()),
+    )
+    conn.execute(
+        "UPDATE completions SET comment_text=?,completed_at=? WHERE task_id=? AND user_id=?",
+        (comment[:500], iso(), task_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    await msg.reply_text(f"Updated the comment for task #{task_id}, member ID {user_id}. The previous comment was retained in edit history.")
+
+
 async def review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.effective_message.reply_text("Admin-only command.")
@@ -265,11 +335,21 @@ async def issue_manual_warning(update: Update, context: ContextTypes.DEFAULT_TYP
     if len(raw) < 2:
         await msg.reply_text("Format: /warn @username reason (or /finalwarn @username reason)")
         return
-    match = re.match(r"@?(\w+)\s+(.+)", raw[1], re.S)
+    # Final-warning destination: private (default), group, or configured admin log chat.
+    # Telegram bots cannot send directly to the admin's Saved Messages.
+    destination = "private"
+    raw_args = raw[1]
+    dest_match = re.search(r"\s+--to=(private|group|log)\s*$", raw_args, re.I)
+    if dest_match:
+        destination = dest_match.group(1).lower()
+        raw_args = raw_args[:dest_match.start()].strip()
+    match = re.match(r"@?(\w+)\s+(.+)", raw_args, re.S)
     if not match:
-        await msg.reply_text("Format: /warn @username reason")
+        await msg.reply_text("Format: /warn @username reason OR /finalwarn @username reason [--to=private|group|log]")
         return
     username, reason = match.group(1), match.group(2).strip()
+    if not final:
+        destination = "private"
     conn = connect_db()
     member = conn.execute(
         "SELECT user_id,user_name FROM members WHERE chat_id=? AND lower(user_name)=lower(?)",
@@ -288,7 +368,26 @@ async def issue_manual_warning(update: Update, context: ContextTypes.DEFAULT_TYP
     conn.commit()
     conn.close()
     notice = "🚨 FINAL WARNING" if level == 3 else ("⚠️ Second warning" if level == 2 else "⚠️ First warning")
-    await msg.reply_text(f"{notice}\nMember: {member['user_name']}\nReason: {reason}")
+    warning_text = f"{notice}\nMember: {member['user_name']}\nReason: {reason}\nIssued by: {display_name(update.effective_user)}"
+    if final and destination == "group":
+        await context.bot.send_message(chat_id=chat.id, text=warning_text)
+        await msg.reply_text("Final warning posted in this group.")
+    elif final and destination == "log":
+        log_chat_id = os.environ.get("FINAL_WARNING_CHAT_ID", "").strip()
+        if not log_chat_id:
+            await msg.reply_text("FINAL_WARNING_CHAT_ID is not configured. Warning is recorded in the database; no message was sent.")
+            return
+        try:
+            await context.bot.send_message(chat_id=int(log_chat_id), text=warning_text)
+            await msg.reply_text("Final warning sent to the configured admin log chat.")
+        except Exception:
+            await msg.reply_text("Could not send to the configured admin log chat. Check FINAL_WARNING_CHAT_ID and ensure the bot is in that chat.")
+    else:
+        try:
+            await context.bot.send_message(chat_id=member["user_id"], text=warning_text)
+            await msg.reply_text("Final warning sent privately to the member." if final else "Warning recorded and sent to the member privately.")
+        except Exception:
+            await msg.reply_text("Warning recorded in the database, but Telegram could not deliver the private message. The member may need to start the bot first.")
 
 
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -321,7 +420,8 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛠 Admin commands\n/review — pending overdue-task reviews\n"
         "/approve TASK_ID USER_ID — confirm miss and issue next warning\n"
         "/dismiss TASK_ID USER_ID — dismiss review\n"
-        "/warn @username reason — issue a warning\n/finalwarn @username reason — issue a final warning\n"
+        "/warn @username reason — issue a private warning\n/finalwarn @username reason [--to=private|group|log] — final warning destination\n"
+        "/review_done — review recent completion comments\n/edit_done TASK_ID USER_ID | comment — correct a completion comment\n"
         "/report — tracker summary\n\nNo member is automatically removed, and posts are never auto-deleted."
     )
 
@@ -469,6 +569,7 @@ async def post_init(application: Application):
     await application.bot.set_my_commands([
         ("start", "Start tracker"), ("rules", "Show rules"), ("tasks", "List your open tasks"),
         ("done", "Report completion"), ("report", "Admin report"), ("review", "Review overdue tasks"),
+        ("review_done", "Review completion comments"), ("edit_done", "Edit a completion comment"),
         ("admin", "Admin controls"),
     ])
     # Check every 15 minutes; only perform review during 20:00–20:59 in Georgia.
@@ -486,6 +587,8 @@ def main():
     app.add_handler(CommandHandler("rules", rules))
     app.add_handler(CommandHandler("tasks", tasks))
     app.add_handler(CommandHandler("done", done))
+    app.add_handler(CommandHandler("review_done", review_done))
+    app.add_handler(CommandHandler("edit_done", edit_done))
     app.add_handler(CommandHandler("review", review))
     app.add_handler(CommandHandler("approve", review_decision))
     app.add_handler(CommandHandler("dismiss", review_decision))
