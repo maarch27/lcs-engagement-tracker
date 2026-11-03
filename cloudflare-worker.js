@@ -89,6 +89,23 @@ async function sendPrivate(env, userId, text) {
   return telegram(env, "sendMessage", { chat_id: userId, text, disable_web_page_preview: true });
 }
 function nameOf(user) { return user.username ? "@" + user.username : (user.first_name || "member"); }
+function displayUser(user) { return user.username ? "@" + user.username : (user.first_name || "Telegram member"); }
+function cleanInstagramUrl(raw) {
+  const trimmed = String(raw || "").replace(/[.,!?]+$/g, "");
+  try {
+    const u = new URL(trimmed);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (!["instagram.com", "instagr.am"].includes(host)) return trimmed;
+    const match = u.pathname.match(/^\/(reel|reels|p|tv)\/([^/]+)\/?/i);
+    if (match) return `https://www.instagram.com/${match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase()}/${match[2]}/`;
+    const profile = u.pathname.match(/^\/([A-Za-z0-9._]+)\/?$/);
+    if (profile) return `https://www.instagram.com/${profile[1]}/`;
+    return `https://www.instagram.com${u.pathname.endsWith("/") ? u.pathname : u.pathname + "/"}`;
+  } catch { return trimmed; }
+}
+function taskChatIdFor(chat, env) {
+  return chat.type === "private" && env.LINK_CHAT_ID ? env.LINK_CHAT_ID : chat.id;
+}
 function dateNow() { return new Date().toISOString(); }
 function tbilisiParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(date);
@@ -183,10 +200,12 @@ async function handleUpdate(update, env) {
     }
   }
   if (text.startsWith("/start") || text.startsWith("/help")) {
-    if (savesChat(env, chatId)) return reply(env, chatId, "📸 SAVES — Weekly Evidence Chat\n\nPost Instagram links you engaged with and upload screenshots or screen recordings as evidence. Keep submissions in this chat so admins can review them.\n\nThe evidence window opens Sunday at 00:00 and closes Monday at 00:00 Georgia time.\n/evidence — admins: review recent submissions\n/review — admins: review recent submissions\n/warnings — admins: view warning summary");
-    if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — Admin Desk\n\nThis chat receives warning alerts and the weekly Saves evidence report.\n/warnings — monthly warning summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions\n/review — review evidence submissions\n\nWeekly report is sent after the Sunday evidence window closes at 00:00 Monday Georgia time.");
+    if (chat.type === "private") return reply(env, chatId,
+      "💗 WELCOME TO STAR LINKS!\\n\\nYour personal engagement dashboard is here. Use these commands in this private bot chat; your task list connects to the main link chat.\\n\\n📋 YOUR MENU\\n/tasks — see posts you still need to engage with\\n/done TASK_ID | your comment — report your meaningful comment\\n/confirm TASK_ID — confirm you liked and saved the post\\n/warnings — check your current-month warning count\\n/rules — read the engagement rules\\n\\n🔗 HOW TO PARTICIPATE\\n1. Open the main Star Links link chat.\\n2. Post only your Instagram post link. The bot stores a clean URL and shows your Telegram @username when available.\\n3. You can post once every 24 hours unless an admin approves an exception.\\n4. Engage with other posts within 24 hours: like, save and leave a relevant comment.\\n5. Return here and use /tasks, /done and /confirm.\\n\\n📸 SAVES CHAT\\nSubmit screenshots or screen recordings during the Sunday evidence window.\\n\\n⚠️ The bot checks links and tracker reports, but cannot independently verify Instagram likes, saves or comments. Admins may review evidence manually.\\n\\n💌 Help: @marriaammi, @lizal, @itsimplymartha or @drlamarya.");
+    if (savesChat(env, chatId)) return reply(env, chatId, "📸 SAVES — WEEKLY EVIDENCE CHAT\\n\\nPost Instagram links you engaged with and upload screenshots or screen recordings as evidence.\\n\\nOpen: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time.\\n/evidence and /review are admin review commands.");
+    if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\\n\\nWarning alerts and the weekly Saves evidence report appear here.\\n/warnings — monthly summary\\n/warn USER_ID | reason — issue a warning\\n/evidence — review evidence submissions");
     return reply(env, chatId,
-      "💗 Welcome to Star Links — Daily Engagement!\n\nLet’s support each other and grow together ✨\n\n👥 MEMBERS\n/tasks — view engagement tasks\n/rules — community rules\n/done TASK_ID | your comment — report your comment\n/confirm TASK_ID — confirm you liked and saved the post\n/warnings — view your current-month warning count\n\n🛠 ADMINS\n/admin — admin controls\n/report — daily activity report\n/flags — review flagged reports\n/tracked — privately view tracked posts (admins)\n/warnings — view warning summary (admins)\n/warn USER_ID | reason — issue a warning (admins)\n/approvepost USER_ID — approve one early post (admins)\n/evidence — list recent submitted evidence (admins)\n/check TASK_ID — list known members missing reports (admins)\n\n📸 SAVES CHAT\nSend screenshots or screen recordings as evidence. Admins can use /warnings, /warn, /evidence and /review.\n\n💌 NEED HELP?\nContact @marriaammi, @Lizal, @itsimplymartha, or @drlamarya.\n\nThe bot never deletes messages or auto-bans members. Instagram likes/saves cannot be verified directly by the bot. 💗");
+      "💗 STAR LINKS — DAILY ENGAGEMENT\\n/tasks — view engagement tasks\\n/rules — community rules\\n/done TASK_ID | your comment — report your comment\\n/confirm TASK_ID — confirm you liked and saved the post\\n/warnings — warning count / admin summary\\n/admin — admin controls\\n/report — daily report\\n/flags — review flagged reports\\n/tracked — tracked posts (admins)\\n/warn USER_ID | reason — issue a warning (admins)\\n/approvepost USER_ID — approve an early post (admins)\\n/evidence — review evidence (admins)\\n/check TASK_ID — check reported completion (admins)\\n\\nThe bot never deletes messages or auto-bans members. Instagram likes/saves cannot be independently verified.");
   }
   if (text.startsWith("/rules")) {
     return reply(env, chatId,
@@ -197,7 +216,8 @@ async function handleUpdate(update, env) {
     const match = text.match(/^\/confirm(?:@\w+)?\s+(\d+)$/);
     if (!match) return reply(env, chatId, "Format: /confirm TASK_ID — use this after you have liked and saved the post.");
     const taskId = Number(match[1]);
-    const data = await load(env, chatId);
+    const dataChatId = taskChatIdFor(chat, env);
+    const data = await load(env, dataChatId);
     const task = data.tasks.find(t => t.id === taskId);
     if (!task) return reply(env, chatId, `I couldn't find task #${taskId} in this chat.`);
     if (String(task.posterId) === String(user.id)) return reply(env, chatId, "You don't need to engage with your own post.");
@@ -210,7 +230,7 @@ async function handleUpdate(update, env) {
     } else {
       data.completions.push({ taskId, userId: user.id, name: nameOf(user), comment: "", likesConfirmed: true, saveConfirmed: true, at: dateNow(), confirmedAt: dateNow() });
     }
-    await save(env, chatId, data);
+    await save(env, dataChatId, data);
     return reply(env, chatId, `💗 Like/save confirmation recorded for task #${taskId}. This is a self-report; the bot cannot verify Instagram actions directly.`);
   }
   if (text.startsWith("/check")) {
@@ -361,7 +381,8 @@ async function handleUpdate(update, env) {
     return reply(env, chatId, `📊 Star Links daily report (UTC)\nTasks posted today: ${taskCount}\nCompletion self-reports today: ${doneCount}\nUnreported task entries: ${openCount}\nFlags today: ${flags.length}\n\nCompletion is self-reported; likes/saves are not independently verified.`);
   }
   if (text.startsWith("/tasks")) {
-    const data = await load(env, chatId);
+    const dataChatId = taskChatIdFor(chat, env);
+    const data = await load(env, dataChatId);
     const ownOpen = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-20).reverse();
     return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks (including overdue posts — please catch up on all of them):\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n${t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE — please complete this task" : "⏳ Deadline"}: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗")
   }
@@ -369,7 +390,8 @@ async function handleUpdate(update, env) {
     const match = text.match(/^\/done(?:@\w+)?\s+(\d+)\s*\|\s*(.+)$/s);
     if (!match) return reply(env, chatId, "Format: /done TASK_ID | the meaningful comment you left");
     const taskId = Number(match[1]), comment = match[2].trim();
-    const data = await load(env, chatId);
+    const dataChatId = taskChatIdFor(chat, env);
+    const data = await load(env, dataChatId);
     const task = data.tasks.find(t => t.id === taskId);
     if (!task) return reply(env, chatId, `I couldn't find task #${taskId} in this chat. Use /tasks.`);
     if (task.posterId === user.id) return reply(env, chatId, "You can't mark your own post as an engagement task you completed.");
@@ -379,7 +401,7 @@ async function handleUpdate(update, env) {
     const generic = GENERIC.has(normalized) || wordCount < 4;
     if (generic && task.instruction !== "EMOJI_ONLY" && !admin) {
       const flag = { id: data.flags.length + 1, chatId, userId: user.id, name: nameOf(user), reason: `Task #${taskId}: possibly short/generic comment: ${comment.slice(0,180)}`, at: dateNow() };
-      data.flags.push(flag); await save(env, chatId, data);
+      data.flags.push(flag); await save(env, dataChatId, data);
       return reply(env, chatId, `⚠️ Your completion for task #${taskId} was flagged for admin review because the comment may be too short or generic. Please submit a specific, relevant comment. Likes and saves are still required.`);
     }
     // Record the comment report, but explicitly ask members to confirm likes and saves too.
@@ -390,6 +412,7 @@ async function handleUpdate(update, env) {
     return reply(env, chatId, `💗 Comment report recorded for task #${taskId}.\n\n⚠️ After liking and saving, send /confirm ${taskId} to record those actions too.\n\nThe bot cannot verify Instagram likes or saves directly, so these records are self-reports, not proof.`);
   }
   if (!["group", "supergroup"].includes(chat.type)) return;
+  IG_RE.lastIndex = 0;
   const links = text.match(IG_RE);
   if (!links || !user) return;
   const data = await load(env, chatId);
@@ -418,8 +441,10 @@ async function handleUpdate(update, env) {
   else if (lower.includes("repost to x") || lower.includes("repost on x")) instruction = "ALL + REPOST TO X";
   else if (lower.includes("repost")) instruction = "ALL + REPOST";
   const ids = [];
+  const canonicalLinks = [];
   for (const link of links) {
-    const clean = link.replace(/[.,!?\)\]\}]+$/g, "");
+    const clean = cleanInstagramUrl(link);
+    canonicalLinks.push(clean);
     const id = data.nextId++;
     const createdAt = dateNow();
     const deadline = new Date(new Date(createdAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -429,8 +454,8 @@ async function handleUpdate(update, env) {
   await save(env, chatId, data);
   const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed));
   const latestTask = data.tasks.find(t => t.id === Number(ids[0].slice(1)));
-  const note = `💗 Thank you ${nameOf(user)} for sharing your Instagram post!\n\n✅ Your post has been added to the Star Links Engagement Tracker.\n📌 Task ID: ${ids.join(", ")}\n⏳ Daily engagement deadline: ${formatGeorgian(latestTask.deadline)}\n\n💗 Please make sure to engage with the other posts in this cycle: like + save and leave the requested, meaningful comment (3+ words unless the post says otherwise).\n\nUse /tasks to review outstanding tasks. Report completion in the group with /done TASK_ID | your comment.\n\nℹ️ The bot records self-reports; it cannot independently verify Instagram likes or saves.`;
-  // Send this confirmation privately to the person who shared the link. Never post the notification in the group.
+  const note = `💗 Your Instagram link is registered!\\n\\n${canonicalLinks[0]}\\nPosted by: ${displayUser(user)}\\nTask ID: ${ids.join(", ")}\\nYou can post again after 24 hours: ${formatGeorgian(latestTask.deadline)}\\n\\nUse /tasks in this bot chat to see posts you need to engage with. Then use /done TASK_ID | your comment and /confirm TASK_ID after liking and saving.\\n\\nThe bot checks the clean link and reports in this tracker. It cannot independently verify Instagram likes/saves or comments on Instagram.`;
+  await reply(env, chatId, `🔗 ${displayUser(user)}\\n${canonicalLinks.join("\\n")}`, msg.message_id);
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
   if (!dm.ok) console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
 }
