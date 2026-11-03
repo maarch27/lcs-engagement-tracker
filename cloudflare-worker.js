@@ -566,7 +566,7 @@ async function handlePersistentMenu(env, chat, action) {
     text = CHAT_RULES;
   } else if (action === "admins") {
     text = "👑 <b>Admins — follow or message</b>\n" + IG_ADMINS.map(([name, url, telegramUsername]) =>
-      "• <a href=\\"" + url + "\\">@"+ htmlEscape(name) + "</a> · <a href=\\"https://t.me/" + telegramUsername + "\\">Message on Telegram</a>"
+      "• <a href=\"" + url + "\">@"+ htmlEscape(name) + "</a> · <a href=\\"https://t.me/" + telegramUsername + "\">Message on Telegram</a>"
     ).join("\n") + "\n\nUse the Instagram link to follow an admin, or the Telegram link to contact them.";
   } else if (action === "members") {
     const page = 0;
@@ -574,7 +574,7 @@ async function handlePersistentMenu(env, chat, action) {
     const rows = IG_MEMBERS.slice(0, pageSize);
     const pageCount = Math.max(1, Math.ceil(IG_MEMBERS.length / pageSize));
     text = rows.length
-      ? "👥 <b>Members to follow</b> · page 1/" + pageCount + "\n\n" + rows.map(([name, url]) => "• <a href=\\"" + url + "\\">@"+ htmlEscape(name) + "</a>").join("\n")
+      ? "👥 <b>Members to follow</b> · page 1/" + pageCount + "\n\n" + rows.map(([name, url]) => "• <a href=\"" + url + "\">@"+ htmlEscape(name) + "</a>").join("\n")
       : "👥 No member links are listed yet.";
     replyMarkup = menuPageButtons("list", page, pageCount);
   } else if (action === "posts") {
@@ -586,7 +586,7 @@ async function handlePersistentMenu(env, chat, action) {
     text = rows.length
       ? "📌 <b>Tracked posts</b> · page 1/" + pageCount + "\n\n" + rows.map(task =>
           "Task #" + task.id + " · " + htmlEscape(task.posterName || "member") + " · " + htmlEscape(task.instruction) +
-          "\nDue: " + htmlEscape(task.dueAt) + "\n<a href=\\"" + htmlEscape(task.url) + "\\">Open Instagram post</a>"
+          "\nDue: " + htmlEscape(task.dueAt) + "\n<a href=\"" + htmlEscape(task.url) + "\">Open Instagram post</a>"
         ).join("\n\n") + "\n\nUse /tasks to see your assignments or /done TASK_ID | your comment to report completion."
       : "📌 No tasks yet. The bot starts tracking new Instagram links posted here; older messages from before setup are not imported.";
     replyMarkup = menuPageButtons("posts", 0, pageCount);
