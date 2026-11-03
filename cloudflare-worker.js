@@ -310,7 +310,7 @@ async function handleUpdate(update, env) {
     if (section === "rules") return reply(env, chatId, "💗 STAR LINKS RULES\n\n1. Like and save every assigned post.\n2. Leave a meaningful, relevant comment of at least 3 words unless the post says otherwise.\n3. Complete every assigned post; do not skip tasks.\n4. Submit your comment with /done TASK_ID | your comment, then use /confirm TASK_ID after liking and saving.\n5. Post only one Instagram link every 24 hours unless an admin approves an exception.\n6. Instagram actions are self-reported; the bot cannot independently verify them.");
     if (section === "admins") return reply(env, chatId, "🛡️ STAR LINKS ADMINS\n\n@marriaammi\n@lizal\n@itsimplymartha\n@drlamarya");
     if (section === "warnings") return reply(env, chatId, "🛡️ WARNINGS & REPORTS\n\nUse #WARNING in Star Saves to flag an issue for admin review. Use #IMBACK when returning. These tags do not automatically issue a formal warning. Admins review reports and handle formal warnings.");
-    if (section === "chat") return reply(env, chatId, env.CHAT_CHAT_URL ? "💬 Open the always-on Star Links conversation group: " + env.CHAT_CHAT_URL : "💬 The Chat button is ready, but the conversation group link still needs to be added. Set CHAT_CHAT_URL in the Cloudflare Worker variables, then redeploy.");
+    if (section === "chat") return reply(env, chatId, "💬 Star Links Chat — the casual conversation group. Keep normal chatting here; use Links for engagement posts and Saves for weekly evidence.\n\nOpen Chat: " + (env.CHAT_CHAT_URL || "https://t.me/+_IwypUTODNIzNDI6"));
     const members = (data.participants || []).slice(-100).reverse();
     return reply(env, chatId, members.length ? "👥 MEMBERS SEEN BY THE BOT\n\n" + members.map(p => p.username ? "@" + p.username.replace(/^@/, "") : p.name).join("\n") + "\n\nNote: this list includes members the bot has observed, not necessarily every group member." : "👥 No members have been recorded yet. Members appear here after they send a message in Star Links.");
   }
@@ -331,7 +331,7 @@ async function handleUpdate(update, env) {
     if (botUsername && String(chatId) === String(env.LINK_CHAT_ID)) {
       const botUrl = "https://t.me/" + botUsername;
       const rows = [
-        [{ text: "📋 Posts", url: botUrl + "?start=posts" }, { text: "💬 Chat", url: env.CHAT_CHAT_URL || botUrl + "?start=chat" }],
+        [{ text: "📋 Posts", url: botUrl + "?start=posts" }, { text: "💬 Chat", url: env.CHAT_CHAT_URL || "https://t.me/+_IwypUTODNIzNDI6" }],
         [{ text: "💾 Saves", url: "https://t.me/+zvH-bkE_ZT45NTli" }, { text: "🛡️ Warnings", url: botUrl + "?start=warnings" }],
         [{ text: "📜 Rules", url: botUrl + "?start=rules" }, { text: "👑 Admins", url: botUrl + "?start=admins" }],
         [{ text: "👥 Members", url: botUrl + "?start=members" }]
