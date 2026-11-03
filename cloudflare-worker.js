@@ -115,7 +115,7 @@ async function handleUpdate(update, env) {
   if (text.startsWith("/tasks")) {
     const data = await load(env, chatId);
     const ownOpen = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id)).slice(-20).reverse();
-    return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks:\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗");
+    return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks:\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n⏳ Deadline: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗");
   }
   if (text.startsWith("/done")) {
     const match = text.match(/^\/done(?:@\w+)?\s+(\d+)\s*\|\s*(.+)$/s);
