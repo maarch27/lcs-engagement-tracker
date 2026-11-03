@@ -325,7 +325,7 @@ async function handleUpdate(update, env) {
     "✅ Tracked task: " + ids.join(", ") + "\n" +
     "⏳ Complete engagement within 24 hours: " + dueDisplay + "\n" +
     "💗 Everyone: like + save and leave the requested comment (3+ meaningful words unless the post says otherwise).\n" +
-    "Report with /done TASK_ID | your comment. The bot records reports but cannot verify Instagram likes or saves.", msg.message_id);
+    "Use /done TASK_ID | your comment to record completion.", msg.message_id);
 }
 
 async function rules(env, chatId) {
@@ -366,13 +366,23 @@ async function done(env, msg) {
   if (existing >= 0) data.completions[existing] = completion;
   else data.completions.push(completion);
   await saveChat(env, msg.chat.id, data);
-  return reply(env, msg.replyChatId || msg.chat.id, "💗 Self-report recorded for task #" + taskId + ". This does not independently verify the Instagram like or save.");
+  return reply(env, msg.replyChatId || msg.chat.id, "💗 Your completion report for task #" + taskId + " has been recorded.");
 }
 
 async function requireAdmin(env, msg) {
   if (await isAdmin(env, msg.chat.id, msg.from.id, msg.from.username)) return true;
   await reply(env, msg.replyChatId || msg.chat.id, "This command is available to group admins only.");
   return false;
+}
+
+async function adminPrivateReply(env, msg, text) {
+  const userId = msg.from?.id;
+  if (userId) {
+    const sent = await telegram(env, "sendMessage", { chat_id: userId, text, disable_web_page_preview: true });
+    if (sent.data?.ok) return sent;
+  }
+  return reply(env, msg.replyChatId || msg.chat.id,
+    "Please open the tracker bot in a private chat and press Start to receive admin details privately.");
 }
 
 async function adminCommand(env, msg) {
@@ -401,7 +411,7 @@ async function review(env, msg) {
   if (!(await requireAdmin(env, msg))) return;
   const data = await loadChat(env, msg.chat.id);
   const rows = data.reviews.filter(item => item.status === "pending").slice(-30).reverse();
-  if (!rows.length) return reply(env, msg.replyChatId || msg.chat.id, "No overdue tasks are waiting for review 💗");
+  if (!rows.length) return adminPrivateReply(env, msg, "No overdue tasks are waiting for review 💗");
   const lines = ["🔎 Pending overdue-task reviews (not confirmed violations):"];
   for (const item of rows) lines.push("Task #" + item.taskId + " · " + item.userName + " (user ID " + item.userId + ")\n" + item.reason + "\nApprove: /approve " + item.taskId + " " + item.userId + "\nDismiss: /dismiss " + item.taskId + " " + item.userId);
   return reply(env, msg.replyChatId || msg.chat.id, lines.join("\n\n"));
