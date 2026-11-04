@@ -232,8 +232,9 @@ async function handleUpdate(update, env) {
   const command = commandOf(original.text || original.caption || "");
   let msg = original;
   if (isGroup && original.from) msg = { ...original, replyChatId: original.chat.id };
-  if (original.chat.type === "private" && (!command || command === "/ask")) {
-    const question = command === "/ask" ? text.replace(/^\/ask(?:@\w+)?\s*/i, "").trim() : text.trim();
+  if (original.chat.type === "private" && (!(original.text || original.caption || "").trim().startsWith("/") || command === "/ask")) {
+    const rawText = original.text || original.caption || "";
+    const question = command === "/ask" ? rawText.replace(/^\/ask(?:@\w+)?\s*/i, "").trim() : rawText.trim();
     if (question) return chatWithAssistant(env, original, question);
     return reply(env, original.chat.id, "Ask me a question, or send /ask followed by your question.");
   }
