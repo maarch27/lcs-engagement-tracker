@@ -4,6 +4,7 @@
   "main": "cloudflare-worker.js",
   "compatibility_date": "2026-11-03",
   "workers_dev": true,
+  "ai": { "binding": "AI" },
   "kv_namespaces": [
     {
       "binding": "LCS_DATA",
