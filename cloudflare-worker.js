@@ -66,7 +66,7 @@ const CHAT_RULES = `❗️CHAT RULES — PLEASE READ CAREFULLY (RULES HAVE BEEN 
 ☑ Saves are posted only on Sundays.
 ☑ Sunday is our rest day — only saves are allowed to be posted.
 ‼️ If you do not have your required saves completed within 48 hours, you will be banned from posting links. However, you must continue completing other members’ links.
-‼️ After receiving 3 warnings, you must leave the chat. Admins will notify you in advance.
+‼️ After 3 admin-confirmed warnings, new Instagram links will not be added to the tracker. Please contact an admin privately if you think a warning is incorrect.
 ‼️ If you are unable to participate in engagement, you must post a numbered warning using #WARNING.
 Example: #WARNING2 I won’t be able to participate in engagement.
 Warnings must be numbered consecutively. A maximum of 2 warnings per month is allowed.
@@ -297,6 +297,17 @@ async function handleUpdate(update, env) {
     return;
   }
   const data = groupData;
+  const confirmedWarnings = data.warnings.filter(warning => String(warning.userId) === String(user.id)).length;
+  if (confirmedWarnings >= 3) {
+    await reply(env, msg.replyChatId || chat.id, "This link was not added to the tracker. Please contact an admin privately.", msg.message_id);
+    await telegram(env, "sendMessage", {
+      chat_id: user.id,
+      text: "Your new Instagram link was not added to tracker tasks because you have 3 admin-confirmed warnings. Contact an admin privately if you think this is wrong.",
+      disable_web_page_preview: true,
+    });
+    if (memberChanged) await saveChat(env, chat.id, groupData);
+    return;
+  }
   let instruction = "ALL";
   const lowered = text.toLowerCase();
   if (lowered.includes("emoji only") || lowered.includes("emoji-only")) instruction = "EMOJI_ONLY";
@@ -391,7 +402,7 @@ async function adminCommand(env, msg) {
     "🛠 Admin commands\n/review — pending overdue-task reviews\n" +
     "/approve TASK_ID USER_ID — confirm miss and issue next warning\n" +
     "/dismiss TASK_ID USER_ID — dismiss review\n/warn @username reason\n/finalwarn @username reason\n" +
-    "/report — private tracker summary\n\nNo member is automatically removed, and posts are never auto-deleted.\n\nVerification status: " +
+    "/report — private tracker summary\n\nAfter 3 admin-confirmed warnings, new links are not added to tracker tasks. Posts and members are not automatically removed.\n\nVerification status: " +
     "/done records the submitted comment and screens its text for length and generic wording; it does not confirm the comment appears on Instagram. Meta comment access is not connected. Member-by-member likes and saves cannot be verified through this API. Likes are available only as aggregate counts for eligible media with owner authorization; saves need manual evidence review.");
 }
 
@@ -402,9 +413,12 @@ async function report(env, msg) {
   const open = data.tasks.reduce((count, task) => count + task.targets.filter(target => !hasCompletion(data, task.id, target.userId)).length, 0);
   const today = new Date().toISOString().slice(0, 10);
   const warningsToday = data.warnings.filter(item => item.issuedAt.startsWith(today)).length;
+  const warningCounts = {};
+  for (const warning of data.warnings) warningCounts[warning.userId] = (warningCounts[warning.userId] || 0) + 1;
+  const linkRestricted = Object.values(warningCounts).filter(count => count >= 3).length;
   return adminPrivateReply(env, msg,
     "📊 LCS tracker report\nTasks recorded: " + data.tasks.length + "\nOpen task assignments: " + open +
-    "\nPending overdue reviews: " + pending + "\nWarnings issued today (UTC): " + warningsToday +
+    "\nPending overdue reviews: " + pending + "\nWarnings issued today (UTC): " + warningsToday + "\nMembers restricted from new link tracking: " + linkRestricted +
     "\n\nInstagram check status: /done screens submitted comment text, but does not confirm comments appear on Instagram. Meta comment access is not connected. The API does not identify which member liked or saved a post. It can provide aggregate like counts only for eligible media with owner authorization; saves need manual evidence review. Overdue tasks need admin review before warnings.");
 }
 
@@ -440,8 +454,9 @@ async function reviewDecision(env, msg, command) {
   item.reviewedAt = new Date().toISOString();
   data.warnings.push({ userId, userName: item.userName, level, reason, issuedAt: item.reviewedAt, issuedBy: nameOf(msg.from) });
   await saveChat(env, msg.chat.id, data);
-  const notice = level === 1 ? "⚠️ First warning" : (level === 2 ? "⚠️ Second warning — repeated missed deadlines are being recorded." : "🚨 FINAL WARNING — further missed deadlines may lead to removal after admin review.");
-  const warningText = notice + "\nMember: " + item.userName + "\n" + reason;
+  const notice = level === 1 ? "⚠️ First warning" : (level === 2 ? "⚠️ Second warning — repeated missed deadlines are being recorded." : "🚨 FINAL WARNING");
+  const restrictionNote = prior + 1 >= 3 ? "\nNew Instagram links from this member will no longer be added to tracker tasks after this third admin-confirmed warning." : "";
+  const warningText = notice + "\nMember: " + item.userName + "\n" + reason + restrictionNote;
   const posted = await telegram(env, "sendMessage", { chat_id: SAVES_CHAT_ID, text: warningText, disable_web_page_preview: true });
   if (!posted.data?.ok) return reply(env, msg.replyChatId || msg.chat.id, "Warning was recorded, but I could not post it in the Saves chat. Check that I’m still in that chat.");
   return reply(env, msg.replyChatId || msg.chat.id, "Warning recorded and posted in the Saves chat.");
@@ -463,7 +478,8 @@ async function issueManualWarning(env, msg, isFinal) {
   data.warnings.push({ userId, userName, level, reason, issuedAt: new Date().toISOString(), issuedBy: nameOf(msg.from) });
   await saveChat(env, msg.chat.id, data);
   const notice = level === 3 ? "🚨 FINAL WARNING" : (level === 2 ? "⚠️ Second warning" : "⚠️ First warning");
-  const warningText = notice + "\nMember: " + userName + "\nReason: " + reason;
+  const restrictionNote = prior + 1 >= 3 ? "\nNew Instagram links from this member will no longer be added to tracker tasks after this third admin-confirmed warning." : "";
+  const warningText = notice + "\nMember: " + userName + "\nReason: " + reason + restrictionNote;
   const posted = await telegram(env, "sendMessage", { chat_id: SAVES_CHAT_ID, text: warningText, disable_web_page_preview: true });
   if (!posted.data?.ok) return reply(env, msg.replyChatId || msg.chat.id, "Warning was recorded, but I could not post it in the Saves chat. Check that I’m still in that chat.");
   return reply(env, msg.replyChatId || msg.chat.id, "Warning recorded and posted in the Saves chat.");
