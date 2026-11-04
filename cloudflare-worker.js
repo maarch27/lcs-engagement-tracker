@@ -232,6 +232,11 @@ async function handleUpdate(update, env) {
   const command = commandOf(original.text || original.caption || "");
   let msg = original;
   if (isGroup && original.from) msg = { ...original, replyChatId: original.chat.id };
+  if (original.chat.type === "private" && (!command || command === "/ask")) {
+    const question = command === "/ask" ? text.replace(/^\/ask(?:@\w+)?\s*/i, "").trim() : text.trim();
+    if (question) return chatWithAssistant(env, original, question);
+    return reply(env, original.chat.id, "Ask me a question, or send /ask followed by your question.");
+  }
   if (!isGroup && original.chat.type === "private" && command && !["/start", "/help"].includes(command)) {
     const groupId = await findMemberGroup(env, original.from?.id);
     if (!groupId) return reply(env, original.chat.id, "Open the engagement group and send any message first so I can connect your private menu.");
@@ -386,6 +391,39 @@ async function requireAdmin(env, msg) {
   return false;
 }
 
+async function chatWithAssistant(env, msg, question) {
+  if (!env.AI) return reply(env, msg.chat.id, "My AI helper is not connected yet. You can still use the menu and commands, or message an admin privately.");
+  const questionText = String(question).slice(0, 1200);
+  const now = Date.now();
+  const day = new Date().toISOString().slice(0, 10);
+  const limitKey = "ai-usage:" + day;
+  const usage = await env.LCS_DATA.get(limitKey, "json") || { count: 0, users: {} };
+  const userId = String(msg.from.id);
+  const userUsage = usage.users[userId] || { count: 0, lastAt: 0 };
+  if (now - userUsage.lastAt < 60_000) return reply(env, msg.chat.id, "Give me a minute between questions so I can keep the AI available to everyone.");
+  if (usage.count >= 20 || userUsage.count >= 5) return reply(env, msg.chat.id, "I’ve reached today’s AI question limit. Please ask an admin; the tracker commands still work.");
+  const historyKey = "ai-chat:" + userId;
+  const history = await env.LCS_DATA.get(historyKey, "json") || [];
+  const system = "You are the private helper for the LCS Instagram engagement Telegram bot. Answer briefly and warmly in the language the member uses. Help explain the bot, 24-hour deadlines, /tasks, /done TASK_ID | comment, and group rules. Never claim that Instagram comments, likes, or saves are automatically verified: the bot records a comment report and admins review overdue items; saves need manual evidence. Never issue warnings, decide whether a member broke a rule, promise a moderator outcome, or tell anyone they will be removed. For warning disputes, uncertain rules, account access, or safety concerns, direct the user to contact an admin privately. Do not expose another member’s information or internal admin notes. Say plainly when you are unsure.";
+  const messages = [{ role: "system", content: system }, ...history.slice(-6), { role: "user", content: questionText }];
+  try {
+    const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fp8", { messages, max_tokens: 240, temperature: 0.3 });
+    const answer = String(result?.response || result?.result?.response || "").trim();
+    if (!answer) throw new Error("empty AI response");
+    history.push({ role: "user", content: questionText }, { role: "assistant", content: answer.slice(0, 3000) });
+    await env.LCS_DATA.put(historyKey, JSON.stringify(history.slice(-8)), { expirationTtl: 86400 });
+    userUsage.count++;
+    userUsage.lastAt = now;
+    usage.users[userId] = userUsage;
+    usage.count++;
+    await env.LCS_DATA.put(limitKey, JSON.stringify(usage), { expirationTtl: 172800 });
+    return reply(env, msg.chat.id, answer.slice(0, 3500));
+  } catch (error) {
+    console.error("AI helper unavailable", error?.message || "unknown error");
+    return reply(env, msg.chat.id, "I can’t answer with AI right now. Please message an admin privately; the tracker commands are still available.");
+  }
+}
+
 async function adminPrivateReply(env, msg, text) {
   const userId = msg.from?.id;
   if (userId) {
@@ -401,7 +439,7 @@ async function adminCommand(env, msg) {
   return adminPrivateReply(env, msg,
     "🛠 Admin commands\n/review — pending overdue-task reviews\n" +
     "/approve TASK_ID USER_ID — confirm miss and issue next warning\n" +
-    "/dismiss TASK_ID USER_ID — dismiss review\n/warn @username reason\n/finalwarn @username reason\n" +
+    "/dismiss TASK_ID USER_ID | note — dismiss review and send a private note\n/warn @username reason\n/finalwarn @username reason\n" +
     "/report — private tracker summary\n\nAfter 3 admin-confirmed warnings, new links are not added to tracker tasks. Posts and members are not automatically removed.\n\nVerification status: " +
     "/done records the submitted comment and screens its text for length and generic wording; it does not confirm the comment appears on Instagram. Meta comment access is not connected. Member-by-member likes and saves cannot be verified through this API. Likes are available only as aggregate counts for eligible media with owner authorization; saves need manual evidence review.");
 }
@@ -434,18 +472,25 @@ async function review(env, msg) {
 
 async function reviewDecision(env, msg, command) {
   if (!(await requireAdmin(env, msg))) return;
-  const parts = (msg.text || "").trim().split(/\s+/);
-  if (parts.length !== 3 || !/^\d+$/.test(parts[1]) || !/^\d+$/.test(parts[2])) return reply(env, msg.replyChatId || msg.chat.id, "Format: /approve TASK_ID USER_ID or /dismiss TASK_ID USER_ID");
-  const taskId = Number(parts[1]);
-  const userId = String(parts[2]);
+  const decision = (msg.text || "").trim().match(/^\/(?:approve|dismiss)(?:@\w+)?\s+(\d+)\s+(\d+)(?:\s+\|\s*(.+))?$/s);
+  if (!decision) return adminPrivateReply(env, msg, "Format: /approve TASK_ID USER_ID or /dismiss TASK_ID USER_ID | optional note");
+  const taskId = Number(decision[1]);
+  const userId = String(decision[2]);
   const data = await loadChat(env, msg.chat.id);
   const item = data.reviews.find(row => row.taskId === taskId && row.userId === userId && row.status === "pending");
   if (!item) return reply(env, msg.replyChatId || msg.chat.id, "No matching pending review was found.");
   if (command === "/dismiss") {
     item.status = "dismissed";
     item.reviewedAt = new Date().toISOString();
+    const note = decision[3] || "";
+    item.adminNote = note.slice(0, 500);
     await saveChat(env, msg.chat.id, data);
-    return reply(env, msg.replyChatId || msg.chat.id, "Review dismissed for task #" + taskId + ". No warning was issued.");
+    const delivered = await telegram(env, "sendMessage", {
+      chat_id: userId,
+      text: "💗 Admin update for task #" + taskId + ": your overdue task was reviewed and dismissed. No warning was issued." + (note ? "\nAdmin note: " + note.slice(0, 500) : "") + "\nIf anything is unclear, message an admin privately.",
+      disable_web_page_preview: true,
+    });
+    return adminPrivateReply(env, msg, "Review dismissed for task #" + taskId + ". No warning was issued." + (delivered.data?.ok ? " The member was notified privately." : " I could not DM the member; ask them to open the bot and press Start."));
   }
   const prior = data.warnings.filter(warning => warning.userId === userId).length;
   const level = Math.min(prior + 1, 3);
@@ -458,8 +503,13 @@ async function reviewDecision(env, msg, command) {
   const restrictionNote = prior + 1 >= 3 ? "\nNew Instagram links from this member will no longer be added to tracker tasks after this third admin-confirmed warning." : "";
   const warningText = notice + "\nMember: " + item.userName + "\n" + reason + restrictionNote;
   const posted = await telegram(env, "sendMessage", { chat_id: SAVES_CHAT_ID, text: warningText, disable_web_page_preview: true });
-  if (!posted.data?.ok) return reply(env, msg.replyChatId || msg.chat.id, "Warning was recorded, but I could not post it in the Saves chat. Check that I’m still in that chat.");
-  return reply(env, msg.replyChatId || msg.chat.id, "Warning recorded and posted in the Saves chat.");
+  const memberNotice = await telegram(env, "sendMessage", {
+    chat_id: userId,
+    text: "⚠️ An admin reviewed the overdue report for task #" + taskId + " and confirmed it. This is warning " + (prior + 1) + "/3." + restrictionNote + "\nReason: " + reason + "\nIf you think this was a mistake, contact an admin privately.",
+    disable_web_page_preview: true,
+  });
+  if (!posted.data?.ok || !memberNotice.data?.ok) return adminPrivateReply(env, msg, "The admin decision and warning were recorded. " + (!posted.data?.ok ? "I could not post the warning in the Saves chat. " : "") + (!memberNotice.data?.ok ? "I could not DM the member; ask them to open the bot and press Start." : ""));
+  return adminPrivateReply(env, msg, "Warning recorded in the Saves chat and the member was notified privately.");
 }
 
 async function issueManualWarning(env, msg, isFinal) {
@@ -572,7 +622,7 @@ function menuWelcomeText(chatId) {
 async function sendMenu(env, chatId, isGroup = false) {
   return telegram(env, "sendMessage", {
     chat_id: chatId,
-    text: isGroup ? menuWelcomeText(chatId) : "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below to explore tracked posts, members, admins, chats, saves, and rules.",
+    text: isGroup ? menuWelcomeText(chatId) : "💗 Welcome to the LCS Engagement Tracker!\nChoose a section below to explore tracked posts, members, admins, chats, saves, and rules.\n\nYou can ask me questions here in private. AI replies give general guidance; admins make warning decisions.",
     reply_markup: isGroup ? persistentMenuKeyboard() : menuKeyboard(),
     disable_web_page_preview: true,
   });
