@@ -335,17 +335,35 @@ async function handleUpdate(update, env) {
     const wasMember = ["member", "administrator", "creator", "restricted"].includes(before);
     const isMember = ["member", "administrator", "creator", "restricted"].includes(after);
     if (user && wasMember && !isMember) {
-      const data = await load(env, membership.chat.id);
+      // Tasks are stored under LINK_CHAT_ID; Telegram's membership update chat ID is the group ID.
+      const dataChatId = env.LINK_CHAT_ID || membership.chat.id;
+      const data = await load(env, dataChatId);
       let changed = 0;
+      const removedTasks = [];
       for (const task of data.tasks || []) {
         if (String(task.posterId) === String(user.id) && !["expired", "rejected", "withdrawn"].includes(task.status)) {
+          if (env.SAVES_CHAT_ID && String(task.publishedChatId) === String(env.SAVES_CHAT_ID) && task.publishedMessageId) {
+            try { await telegram(env, "deleteMessage", { chat_id: task.publishedChatId, message_id: task.publishedMessageId }); }
+            catch (err) { console.error("Could not delete departed member's Saves post", task.id, err); }
+          }
           task.status = "withdrawn";
           task.withdrawnAt = dateNow();
           task.withdrawnReason = "poster_left_group";
+          removedTasks.push({ id: task.id, url: task.url || "", status: "withdrawn" });
           changed++;
         }
       }
-      if (changed) await save(env, membership.chat.id, data);
+      if (changed) await save(env, dataChatId, data);
+      const leftMembers = await loadGlobal(env, "leftMembers", []);
+      leftMembers.push({ userId: user.id, username: user.username || "", name: [user.first_name, user.last_name].filter(Boolean).join(" ") || ("User " + user.id), chatId: membership.chat.id, at: dateNow(), tasks: removedTasks });
+      await saveGlobal(env, "leftMembers", leftMembers.slice(-500));
+      if (env.WARNING_CHAT_ID) {
+        await reply(env, env.WARNING_CHAT_ID,
+          "🚪 MEMBER LEFT LINKS GROUP\nMember: " + (user.username ? "@" + user.username : ([user.first_name, user.last_name].filter(Boolean).join(" ") || "User")) +
+          " (ID " + user.id + ")\nActive posts withdrawn: " + changed +
+          (removedTasks.length ? "\n" + removedTasks.map(t => "Task #" + t.id + " — " + t.url).join("\n") : "") +
+          "\nRecorded: " + dateNow());
+      }
       console.log("Member left group; deactivated their active posts", { chatId: membership.chat.id, userId: user.id, changed });
     }
     return;
@@ -729,8 +747,20 @@ async function handleUpdate(update, env) {
     await saveGlobal(env, "evidence", evidence);
     return; // Evidence is stored silently; no public acknowledgement.
   }
+  if (text.startsWith("/left")) {
+    if (!(await isAdmin(env, env.LINK_CHAT_ID || chatId, user.id, user.username))) return reply(env, chatId, "This command is available to Star Links admins only.");
+    const leftMembers = await loadGlobal(env, "leftMembers", []);
+    const rows = leftMembers.slice(-30).reverse();
+    return reply(env, chatId, rows.length
+      ? "🚪 MEMBERS WHO LEFT LINKS — latest 30\n\n" + rows.map(m => {
+          const label = m.username ? "@" + m.username : (m.name || "User");
+          const tasks = (m.tasks || []).map(t => "#" + t.id).join(", ");
+          return label + " (ID " + m.userId + ")\nLeft: " + m.at + "\nWithdrawn tasks: " + (tasks || "none recorded");
+        }).join("\n\n") + "\n\nTheir active tasks are withdrawn and their Saves cards are deleted when possible."
+      : "No member departures recorded yet.");
+  }
   if (text.startsWith("/tracked") || text.startsWith("/remove")) {
-    if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
+    if (!(await isAdmin(env, env.LINK_CHAT_ID || chatId, user.id, user.username))) return reply(env, chatId, "This command is available to Star Links admins only.");
     const data = await load(env, taskChatIdFor(chat, env));
     if (text.startsWith("/remove")) {
       const match = text.match(/^\/remove(?:@\w+)?\s+(\d+)$/);
