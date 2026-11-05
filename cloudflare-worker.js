@@ -7,8 +7,9 @@ export default {
     const cron = controller.cron || "";
     if (cron === "0 * * * *") {
       ctx.waitUntil((async () => {
-        await sendEngagementReminders(env, controller.scheduledTime ? new Date(controller.scheduledTime) : new Date());
         const now = controller.scheduledTime ? new Date(controller.scheduledTime) : new Date();
+        await processExpiredTasks(env, now);
+        await sendEngagementReminders(env, now);
         const local = tbilisiParts(now);
         const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tbilisi", weekday: "short" }).format(now);
         if (weekday === "Sun" && local.hour === 12 && env.SAVES_CHAT_ID) {
@@ -193,6 +194,97 @@ async function setSavesChatOpen(env, open) {
 function georgianDateKey(date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tbilisi", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
+async function processExpiredTasks(env, now = new Date()) {
+  if (!env.LINK_CHAT_ID || !env.LCS_DATA) {
+    console.error("Expiry review skipped: configure LINK_CHAT_ID and LCS_DATA.");
+    return;
+  }
+  const data = await load(env, env.LINK_CHAT_ID);
+  const participants = data.participants || [];
+  const warnings = await loadGlobal(env, "warnings", []);
+  const changedTasks = [];
+  const newlyIssued = [];
+  let warningsChanged = false;
+
+  for (const task of data.tasks || []) {
+    if (!["approved", "active", undefined].includes(task.status) || !task.deadline) continue;
+    if (new Date(task.deadline).getTime() > now.getTime()) continue;
+
+    const knownMembers = participants.filter(p => String(p.userId) !== String(task.posterId));
+    const missing = knownMembers.filter(p =>
+      !((data.completions || []).some(c =>
+        String(c.userId) === String(p.userId) &&
+        Number(c.taskId) === Number(task.id) &&
+        c.comment && c.comment.trim() &&
+        c.likesConfirmed && c.saveConfirmed
+      ))
+    );
+
+    for (const member of missing) {
+      const alreadyWarned = warnings.some(w =>
+        String(w.userId) === String(member.userId) &&
+        Number(w.taskId) === Number(task.id) &&
+        w.reasonCode === "missed_24h_cycle"
+      );
+      if (alreadyWarned) continue;
+      const count = monthlyWarnings(warnings, member.userId, monthKey(now)).length + 1;
+      const warning = {
+        id: warnings.length ? Math.max(...warnings.map(w => w.id || 0)) + 1 : 1,
+        userId: member.userId,
+        name: member.name || member.username || "Member",
+        adminId: 0,
+        adminName: "Star Links automatic 24-hour cycle review",
+        reason: "No complete comment + like/save self-report for expired Task #" + task.id + " before its 24-hour deadline.",
+        reasonCode: "missed_24h_cycle",
+        taskId: task.id,
+        month: monthKey(now),
+        at: now.toISOString(),
+        count
+      };
+      warnings.push(warning);
+      newlyIssued.push({ member, warning, task });
+      warningsChanged = true;
+    }
+
+    task.status = "expired";
+    task.expiredAt = now.toISOString();
+    task.expiryReview = {
+      checkedAt: now.toISOString(),
+      knownParticipants: knownMembers.length,
+      missingReports: missing.length,
+      warningCount: newlyIssued.filter(x => Number(x.task.id) === Number(task.id)).length,
+      note: "Instagram likes and saves are self-reported; the bot cannot independently verify those actions."
+    };
+    changedTasks.push({ task, missingCount: missing.length });
+  }
+
+  if (changedTasks.length) await save(env, env.LINK_CHAT_ID, data);
+  if (warningsChanged) await saveGlobal(env, "warnings", warnings);
+
+  for (const item of newlyIssued) {
+    const count = monthlyWarnings(warnings, item.member.userId, monthKey(now)).length;
+    await sendPrivate(env, item.member.userId,
+      "⚠️ Star Links: 24-hour cycle warning " + count + "/5\n\nTask #" + item.task.id + " expired at " + formatGeorgian(item.task.deadline) +
+      ". Our records show that a complete comment and like/save confirmation was not submitted before the deadline.\n\nIf this is incorrect, please contact an admin. Instagram likes/saves are not independently verified by the bot.");
+    if (count >= 5) {
+      const limits = await loadGlobal(env, "limits", {});
+      limits[String(item.member.userId)] = { untilMonth: monthKey(now), reason: "Reached 5 warnings in one calendar month", at: now.toISOString() };
+      await saveGlobal(env, "limits", limits);
+    }
+  }
+
+  if (changedTasks.length) {
+    const lines = changedTasks.map(({task, missingCount}) =>
+      "• Task #" + task.id + " — " + task.url + "\n  Expired: " + formatGeorgian(task.deadline) +
+      " · Missing complete reports: " + missingCount + " · Status: expired"
+    );
+    const report = "🧾 STAR LINKS — 24-HOUR CYCLE REVIEW\n\n" + lines.join("\n\n") +
+      "\n\nExpired links have been removed from active Posts lists. Newer links remain active with their own deadlines. Missing reports create warnings; Instagram likes/saves are self-reported, not independently verified.";
+    if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, report);
+    else await reply(env, env.LINK_CHAT_ID, report);
+  }
+}
+
 async function sendEngagementReminders(env, now = new Date()) {
   if (!env.LINK_CHAT_ID || !env.LCS_DATA) {
     console.error("Engagement reminders skipped: configure LINK_CHAT_ID and LCS_DATA.");
@@ -200,10 +292,7 @@ async function sendEngagementReminders(env, now = new Date()) {
   }
   const data = await load(env, env.LINK_CHAT_ID);
   const thresholds = [
-    { key: "12h", ms: 12 * 60 * 60 * 1000, min: 4 * 60 * 60 * 1000, label: "⏰ 12-hour reminder" },
-    { key: "4h", ms: 4 * 60 * 60 * 1000, min: 60 * 60 * 1000, label: "🚨 4-hour reminder" },
-    { key: "1h", ms: 60 * 60 * 1000, min: 0, label: "🚨 FINAL 1-hour reminder" },
-    { key: "overdue", ms: 0, min: -24 * 60 * 60 * 1000, label: "⚠️ Past the 24-hour deadline" }
+    { key: "1h", ms: 60 * 60 * 1000, min: 0, label: "⏰ Final 1-hour reminder" }
   ];
   const notices = [];
   let changed = false;
@@ -825,6 +914,17 @@ async function handleUpdate(update, env) {
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
   if (!dm.ok) {
     console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
-    await reply(env, chatId, `💗 ${displayUser(user)}, open the Star Links bot and press /start to receive your private task menu.`, msg.message_id);
   }
+  // One compact group acknowledgement with navigation buttons; keep public chatter low.
+  const compactRows = botUsername ? [
+    [{ text: "📋 Active posts & deadlines", url: "https://t.me/" + botUsername + "?start=posts" }],
+    [{ text: "📜 Rules", url: "https://t.me/" + botUsername + "?start=rules" }, { text: "💗 Menu", url: "https://t.me/" + botUsername }]
+  ] : [];
+  await telegram(env, "sendMessage", {
+    chat_id: chatId,
+    text: "💗 Link received for admin review. Once approved, it will appear in the active 24-hour list. Use the buttons for posts and rules.",
+    reply_to_message_id: msg.message_id,
+    disable_web_page_preview: true,
+    ...(compactRows.length ? { reply_markup: { inline_keyboard: compactRows } } : {})
+  });
 }
