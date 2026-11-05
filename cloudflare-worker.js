@@ -357,6 +357,9 @@ async function handleUpdate(update, env) {
   const chatId = chat.id;
   const text = msg.text || msg.caption || "";
 
+  // No bot chatter or command replies in community groups; use the private bot menu instead.
+  if (["group", "supergroup"].includes(chat.type) && /^\//.test(text.trim())) return;
+
   // STAR LINKS AI ASSISTANT: private, admin-only, with short per-admin conversation history.
   const aiCommand = text.match(/^\/ai(?:@\w+)?(?:\s+([\s\S]*))?$/i);
   if (aiCommand && user) {
@@ -865,6 +868,14 @@ async function handleUpdate(update, env) {
       if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "🕵️ NEW POST AWAITING REVIEW\nMember: " + displayUser(user) + " (ID " + user.id + ")\nTask: #" + id + "\n" + postLink + (instructionText ? "\nInstructions: " + instructionText : "") + "\nReview with /reviewposts, then /approve " + id + " or /reject " + id + " | reason.");
       return reply(env, chatId, "✅ Your Instagram post was submitted privately for review.\n\n📸 " + postLink + "\nTask ID: #" + id + "\nInstructions: " + (instructionText || "Standard engagement: like, save and leave a meaningful relevant comment.") + "\n\n⏳ Review estimate: 3–5 minutes. This is not automatic verification; an admin must approve the post before it appears in the Links group.\n\nYou may submit another post after: " + formatGeorgian(deadline));
     }
+  }
+  if (chat.type === "private") {
+    if (text.trim() && env.WARNING_CHAT_ID) {
+      const sender = displayUser(user) + " (Telegram ID " + user.id + ")";
+      await reply(env, env.WARNING_CHAT_ID, "📩 PRIVATE BOT MESSAGE — ADMIN REVIEW\nFrom: " + sender + "\n\n" + text.slice(0, 3500) + "\n\nReply to this user in their private bot chat if follow-up is needed.");
+      return reply(env, chatId, "💌 Your message has been sent to the Star Links admin team. Please do not send passwords or sensitive information here.");
+    }
+    return;
   }
   if (!["group", "supergroup"].includes(chat.type)) return;
   IG_RE.lastIndex = 0;
