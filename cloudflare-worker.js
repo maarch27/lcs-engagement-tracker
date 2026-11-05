@@ -281,8 +281,10 @@ async function processExpiredTasks(env, now = new Date()) {
       "• Task #" + task.id + " — " + task.url + "\n  Expired: " + formatGeorgian(task.deadline) +
       " · Missing complete reports: " + missingCount + " · Status: expired"
     );
+    const warningLines = newlyIssued.map(({member, warning, task}) => "⚠️ " + (member.username ? "@" + member.username : (member.name || "Member")) + " — warning " + warning.count + "/5 for Task #" + task.id);
     const report = "🧾 STAR LINKS — 24-HOUR CYCLE REVIEW\n\n" + lines.join("\n\n") +
-      "\n\nExpired links have been removed from active Posts lists. Newer links remain active with their own deadlines. Missing reports create warnings; Instagram likes/saves are self-reported, not independently verified.";
+      (warningLines.length ? "\n\n⚠️ WARNINGS ISSUED\n" + warningLines.join("\n") : "\n\nNo new warnings issued in this review.") +
+      "\n\nExpired links have been removed from active Posts lists. Newer links remain active with their own deadlines. Instagram likes/saves are self-reported, not independently verified.";
     // Keep the Links chat quiet. Put the daily 24-hour cycle summary in Saves, as requested.
     if (env.SAVES_CHAT_ID) await reply(env, env.SAVES_CHAT_ID, report);
     else if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, report);
@@ -450,6 +452,8 @@ async function handleUpdate(update, env) {
     return reply(env, chatId, members.length ? "👥 MEMBERS SEEN BY THE BOT\n\n" + members.map(p => p.username ? "@" + p.username.replace(/^@/, "") : p.name).join("\n") : "👥 No members have been recorded yet.");
   }
   if (text.startsWith("/start") || text.startsWith("/help") || text.startsWith("/menu")) {
+    // Never post menus or welcome text into group chats. Members open the private bot menu from the bot profile/DM.
+    if (chat.type !== "private") return;
     if (chat.type === "private") {
       const normalizedUsername = (user.username || "").replace(/^@/, "").toLowerCase();
       if (TRUSTED_ADMIN_USERNAMES.has(normalizedUsername)) {
@@ -483,7 +487,7 @@ async function handleUpdate(update, env) {
         reply_markup: { inline_keyboard: privateMenu }
       });
     }
-    if (savesChat(env, chatId)) return reply(env, chatId, "📸 STAR SAVES — WEEKLY EVIDENCE CHAT\n\nPost the Instagram links you engaged with and upload screenshots or screen recordings as evidence.\n\n🗓️ Open: Sunday 00:00 Georgia time. Closes: Monday 00:00 Georgia time. The bot will remind members during the window and send a weekly report to the admin Warnings chat.\n\nUse #WARNING with a member username or reply to their message to flag an issue for admin review. Use #IMBACK when returning and then catch up on outstanding Posts in the private bot. Tags are recorded for review; they do not automatically issue warnings.");
+    if (savesChat(env, chatId)) return; // Keep Saves quiet; evidence is parsed by the dedicated handler above.
     if (env.WARNING_CHAT_ID && String(chatId) === String(env.WARNING_CHAT_ID)) return reply(env, chatId, "🛡️ WARNINGS — ADMIN DESK\n\nWarning alerts and the weekly Saves evidence report appear here.\n/warnings — monthly summary\n/warn USER_ID | reason — issue a warning\n/evidence — review evidence submissions");
     const botUsername = await loadGlobal(env, "botUsername", "");
     const menuText = "💗 STAR LINKS — ENGAGEMENT COMMUNITY\n\nChoose a section below.\n\n📸 Post — privately submit your Instagram post/Reel for admin approval.\n📋 Posts — view assigned links and deadlines.\n👥 Members — discover community Instagram profiles.\n👩🏻‍💼 Admin — contact moderators.\n💾 Saves & Warnings — weekly evidence and reports.\n📜 Rules — read community guidelines.\n\nGitHub repository: https://github.com/maarch27/lcs-engagement-tracker";
@@ -781,7 +785,8 @@ async function handleUpdate(update, env) {
   if (text.startsWith("/tasks") || text.startsWith("/posts")) {
     const dataChatId = taskChatIdFor(chat, env);
     const data = await load(env, dataChatId);
-    const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
+    const nowMs = Date.now();
+    const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && (!t.deadline || (Number.isFinite(new Date(t.deadline).getTime()) && new Date(t.deadline).getTime() > nowMs)) && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
     return reply(env, chatId, ownOpen.length ? "📋 Your unreported tasks (including overdue posts — please catch up on all of them):\n\n" + ownOpen.map(t => `#${t.id} · ${t.instruction} · posted by ${t.posterName}\n${t.deadline && Date.now() > new Date(t.deadline).getTime() ? "⚠️ OVERDUE — please complete this task" : "⏳ Deadline"}: ${t.deadline ? formatGeorgian(t.deadline) : "Check with an admin"}\n${t.url}`).join("\n\n") : "You have no open tasks recorded here 💗")
   }
   if (text.startsWith("/done")) {
@@ -866,13 +871,12 @@ async function handleUpdate(update, env) {
   const links = text.match(IG_RE);
   if (!links || !user) return;
   const postLinks = links.map(cleanInstagramUrl).filter(link => /^https:\/\/www\.instagram\.com\/(?:p|reel|tv)\/[^/]+\/$/i.test(link));
-  if (!postLinks.length) return reply(env, chatId, "🔗 Please share a direct Instagram post, Reel, or IGTV link (for example, instagram.com/p/... or instagram.com/reel/...). Profile links are not accepted. Your message has not been deleted.");
+  if (!postLinks.length) return; // Ignore unrelated/invalid group messages without bot replies.
   const data = await load(env, chatId);
   const limits = await loadGlobal(env, "limits", {});
   const currentLimit = limits[String(user.id)];
   if (currentLimit && currentLimit.untilMonth === monthKey()) {
-    await reply(env, chatId, `‼️ ${nameOf(user)}, your posting limit is active because you reached 5 warnings this month. You can post again next month. Your message has not been deleted.`, msg.message_id);
-    return;
+    return; // No public bot replies in the Links chat.
   }
   const approvals = await loadGlobal(env, "postApprovals", {});
   const approval = approvals[String(user.id)];
@@ -880,8 +884,7 @@ async function handleUpdate(update, env) {
   const elapsed = lastPost ? Date.now() - new Date(lastPost.at).getTime() : Infinity;
   if (lastPost && elapsed < 24 * 60 * 60 * 1000 && !(approval && !approval.used)) {
     const availableAt = new Date(new Date(lastPost.at).getTime() + 24 * 60 * 60 * 1000);
-    await reply(env, chatId, `⏳ ${nameOf(user)}, you can submit another post after ${formatGeorgian(availableAt.toISOString())}. An admin can approve an exception with /approvepost ${user.id}. Your message has not been deleted and was not added as a task.`, msg.message_id);
-    return;
+    return; // Keep rate-limit feedback out of the group; the private bot flow explains eligibility.
   }
   if (approval && !approval.used) {
     approvals[String(user.id)] = { ...approval, used: true, usedAt: dateNow() };
