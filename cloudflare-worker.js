@@ -365,6 +365,26 @@ async function handleUpdate(update, env) {
           "\nRecorded: " + dateNow());
       }
       console.log("Member left group; deactivated their active posts", { chatId: membership.chat.id, userId: user.id, changed });
+    } else if (user && !wasMember && isMember) {
+      // Rejoining is allowed. Record the return, but do not automatically reactivate old withdrawn links.
+      const leftMembers = await loadGlobal(env, "leftMembers", []);
+      let latest = null;
+      for (let i = leftMembers.length - 1; i >= 0; i--) {
+        if (String(leftMembers[i].userId) === String(user.id) && !leftMembers[i].rejoinedAt) {
+          latest = leftMembers[i];
+          break;
+        }
+      }
+      if (latest) {
+        latest.rejoinedAt = dateNow();
+        await saveGlobal(env, "leftMembers", leftMembers.slice(-500));
+      }
+      if (env.WARNING_CHAT_ID) {
+        await reply(env, env.WARNING_CHAT_ID,
+          "↩️ MEMBER REJOINED LINKS GROUP\nMember: " + (user.username ? "@" + user.username : ([user.first_name, user.last_name].filter(Boolean).join(" ") || "User")) +
+          " (ID " + user.id + ")\nRejoining is allowed. Their previous withdrawn tasks remain closed; they can submit new links normally.");
+      }
+      console.log("Member rejoined group; access allowed", { chatId: membership.chat.id, userId: user.id });
     }
     return;
   }
