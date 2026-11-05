@@ -58,7 +58,8 @@ export default {
             { command: "reject", description: "Admin: reject a pending post with a reason" },
             { command: "warnings", description: "Check your warning count" },
             { command: "rules", description: "Read the engagement rules" },
-            { command: "help", description: "Open help and menu" }
+            { command: "help", description: "Open help and menu" },
+            { command: "ai", description: "Ask the private admin AI assistant" }
           ],
           scope: { type: "all_private_chats" }
         })
