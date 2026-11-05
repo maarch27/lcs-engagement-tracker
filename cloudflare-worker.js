@@ -5,7 +5,7 @@ const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 export default {
   async scheduled(controller, env, ctx) {
     const cron = controller.cron || "";
-    if (cron === "0 * * * *" || cron === "*/5 * * * *") {
+    if (cron === "0 * * * *" || cron === "*/5 * * * *" || cron === "30 19 * * *") {
       ctx.waitUntil((async () => {
         const now = controller.scheduledTime ? new Date(controller.scheduledTime) : new Date();
         await processExpiredTasks(env, now);
@@ -244,6 +244,11 @@ async function processExpiredTasks(env, now = new Date()) {
       warningsChanged = true;
     }
 
+    // Remove the expired public post from Saves; retain the task record for admin history.
+    if (env.SAVES_CHAT_ID && String(task.publishedChatId) === String(env.SAVES_CHAT_ID) && task.publishedMessageId) {
+      try { await telegram(env, "deleteMessage", { chat_id: task.publishedChatId, message_id: task.publishedMessageId }); }
+      catch (err) { console.error("Could not remove expired post message", task.id, err); }
+    }
     task.status = "expired";
     task.expiredAt = now.toISOString();
     task.expiryReview = {
@@ -278,8 +283,9 @@ async function processExpiredTasks(env, now = new Date()) {
     );
     const report = "🧾 STAR LINKS — 24-HOUR CYCLE REVIEW\n\n" + lines.join("\n\n") +
       "\n\nExpired links have been removed from active Posts lists. Newer links remain active with their own deadlines. Missing reports create warnings; Instagram likes/saves are self-reported, not independently verified.";
-    // Never post cycle reports into the busy link group. Only send to a separately configured admin/warning chat.
-    if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, report);
+    // Keep the Links chat quiet. Put the daily 24-hour cycle summary in Saves, as requested.
+    if (env.SAVES_CHAT_ID) await reply(env, env.SAVES_CHAT_ID, report);
+    else if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, report);
   }
 }
 
@@ -621,8 +627,16 @@ async function handleUpdate(update, env) {
       [{ text: "📜 Rules", url: botUrl + "?start=rules" }]
     ] : [];
     const keyboard = rows.length ? { reply_markup: { inline_keyboard: rows } } : {};
-    await telegram(env, "sendMessage", { chat_id: task.chatId || dataChatId, text: postText, disable_web_page_preview: false, ...keyboard });
-    await sendPrivate(env, task.posterId, "✅ Your Instagram post has been approved and published in Star Links!\n\n" + task.url + "\nTask ID: #" + task.id + "\nMembers can now find it in Posts. Please check the bot for updates.");
+    const publishChatId = env.SAVES_CHAT_ID || task.chatId || dataChatId;
+    const publishResponse = await telegram(env, "sendMessage", { chat_id: publishChatId, text: postText, disable_web_page_preview: false, ...keyboard });
+    let publishResult = null;
+    try { publishResult = await publishResponse.clone().json(); } catch {}
+    if (publishResult && publishResult.ok && publishResult.result) {
+      task.publishedChatId = publishChatId;
+      task.publishedMessageId = publishResult.result.message_id;
+      await save(env, dataChatId, data);
+    }
+    await sendPrivate(env, task.posterId, "✅ Your Instagram post has been approved and published in Star Saves!\n\n" + task.url + "\nTask ID: #" + task.id + "\nMembers can find the link in the Saves chat and the private Posts menu.");
     return reply(env, chatId, "✅ Task #" + task.id + " approved and published. The poster was notified privately.");
   }
   if (text.startsWith("/reject ") || text === "/reject") {
