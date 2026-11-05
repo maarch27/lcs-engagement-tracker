@@ -5,7 +5,7 @@ const IG_RE = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/\S+/ig;
 export default {
   async scheduled(controller, env, ctx) {
     const cron = controller.cron || "";
-    if (cron === "0 * * * *") {
+    if (cron === "0 * * * *" || cron === "*/5 * * * *") {
       ctx.waitUntil((async () => {
         const now = controller.scheduledTime ? new Date(controller.scheduledTime) : new Date();
         await processExpiredTasks(env, now);
