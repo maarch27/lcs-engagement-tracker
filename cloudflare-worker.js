@@ -36,7 +36,7 @@ export default {
       const webhookUrl = url.origin + "/";
       const result = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: webhookUrl, secret_token: env.WEBHOOK_SECRET, allowed_updates: ["message", "edited_message"] })
+        body: JSON.stringify({ url: webhookUrl, secret_token: env.WEBHOOK_SECRET, allowed_updates: ["message", "edited_message", "chat_member", "my_chat_member"] })
       });
       const meResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`);
       const meJson = await meResponse.json();
@@ -318,6 +318,30 @@ async function sendWeeklyEvidenceReport(env, scheduledTime = new Date()) {
   await reply(env, env.WARNING_CHAT_ID, report);
 }
 async function handleUpdate(update, env) {
+  // Automatically deactivate a member's active links when Telegram reports they left or were removed.
+  const membership = update.chat_member;
+  if (membership && membership.chat && ["group", "supergroup"].includes(membership.chat.type)) {
+    const before = membership.old_chat_member && membership.old_chat_member.status;
+    const after = membership.new_chat_member && membership.new_chat_member.status;
+    const user = membership.new_chat_member && membership.new_chat_member.user;
+    const wasMember = ["member", "administrator", "creator", "restricted"].includes(before);
+    const isMember = ["member", "administrator", "creator", "restricted"].includes(after);
+    if (user && wasMember && !isMember) {
+      const data = await load(env, membership.chat.id);
+      let changed = 0;
+      for (const task of data.tasks || []) {
+        if (String(task.posterId) === String(user.id) && !["expired", "rejected", "withdrawn"].includes(task.status)) {
+          task.status = "withdrawn";
+          task.withdrawnAt = dateNow();
+          task.withdrawnReason = "poster_left_group";
+          changed++;
+        }
+      }
+      if (changed) await save(env, membership.chat.id, data);
+      console.log("Member left group; deactivated their active posts", { chatId: membership.chat.id, userId: user.id, changed });
+    }
+    return;
+  }
   const msg = update.message || update.edited_message;
   if (!msg || !msg.chat) return;
   const chat = msg.chat, user = msg.from;
