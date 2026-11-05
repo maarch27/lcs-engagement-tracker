@@ -273,6 +273,50 @@ async function handleUpdate(update, env) {
   if (user && user.is_bot) return;
   const chatId = chat.id;
   const text = msg.text || msg.caption || "";
+
+  // STAR LINKS AI ASSISTANT: private, admin-only, with short per-admin conversation history.
+  const aiCommand = text.match(/^\/ai(?:@\w+)?(?:\s+([\s\S]*))?$/i);
+  if (aiCommand && user) {
+    if (chat.type !== "private") {
+      return reply(env, chatId, "🔒 Please use /ai in the bot's private chat so admin questions stay private.", msg.message_id);
+    }
+    const adminChatId = env.LINK_CHAT_ID || chatId;
+    if (!(await isAdmin(env, adminChatId, user.id, user.username))) {
+      return reply(env, chatId, "🔒 The AI assistant is available to authorized Star Links admins only.");
+    }
+    const prompt = (aiCommand[1] || "").trim();
+    if (!prompt) {
+      return reply(env, chatId, "🤖 Star Links AI\n\nAsk me about bot errors, code, features, or debugging.\n\nExample: /ai Explain how the post approval flow works.\n\nThis first version can answer questions, but cannot directly edit GitHub or deploy the Worker.");
+    }
+    if (!env.AI || typeof env.AI.run !== "function") {
+      return reply(env, chatId, "⚙️ AI is not connected yet. In Cloudflare, open this Worker → Settings → Bindings → Add binding → Workers AI, set the variable name to AI, save, then deploy. No paid API key is needed for the free Workers AI allowance.");
+    }
+    const historyKey = "global:aiHistory:" + String(user.id);
+    const history = await loadGlobal(env, historyKey.replace(/^global:/, ""), []);
+    const messages = [
+      {
+        role: "system",
+        content: "You are Star Links AI, a careful coding and operations assistant for the Star Links Telegram engagement tracker running on Cloudflare Workers. Help the authorized admin understand, debug, and improve the bot. Be practical and concise. You do not have direct access to the repository, live logs, Telegram account, secrets, or deployment unless explicitly provided in the message. Never claim to have edited, tested, or deployed code when you have not. Ask the admin to share sanitized errors or relevant code when needed. Never ask them to paste API keys, bot tokens, webhook secrets, or personal data. Explain safe, reversible steps and recommend reviewing code changes before deployment."
+      },
+      ...history,
+      { role: "user", content: prompt.slice(0, 3000) }
+    ];
+    try {
+      const result = await env.AI.run("@cf/zai-org/glm-4.7-flash", {
+        messages,
+        max_tokens: 700,
+        temperature: 0.3
+      });
+      const answer = String(result && (result.response || result.output_text || result.text) || "").trim();
+      if (!answer) throw new Error("AI returned an empty response");
+      const updated = [...history, { role: "user", content: prompt.slice(0, 3000) }, { role: "assistant", content: answer }].slice(-8);
+      await saveGlobal(env, historyKey.replace(/^global:/, ""), updated);
+      return reply(env, chatId, "🤖 Star Links AI\n\n" + answer.slice(0, 3500), msg.message_id);
+    } catch (err) {
+      console.error("Star Links AI request failed:", String(err && err.message || err).slice(0, 300));
+      return reply(env, chatId, "⚠️ I couldn't get an AI response right now. Check that the Workers AI binding is enabled and that the free daily allowance has not been exhausted. Please try again later.");
+    }
+  }
   if (["group", "supergroup"].includes(chat.type) && user && !user.is_bot) {
     const roster = await load(env, chatId);
     roster.participants = roster.participants || [];
