@@ -678,15 +678,6 @@ async function handleUpdate(update, env) {
     const rows = evidence.slice(-15).reverse();
     return reply(env, chatId, rows.length ? "📸 Recent evidence submissions (manual review)\n\n" + rows.map(e => `Evidence #${e.id} · ${e.name} (ID ${e.userId})\nType: ${e.type} · ${e.at}\n${e.caption || "No caption"}${e.fileId ? "\nTelegram file ID saved" : ""}`).join("\n\n") : "No evidence submissions recorded yet.");
   }
-  if (savesChat(env, chatId) && /#(?:WARNING|IMBACK)\b/i.test(text)) {
-    const tags = [...text.matchAll(/#(?:WARNING|IMBACK)\b/gi)].map(m => m[0].toUpperCase());
-    const notices = await loadGlobal(env, "savesNotices", []);
-    for (const tag of tags) notices.push({ id: notices.length ? Math.max(...notices.map(n => n.id || 0)) + 1 : 1, tag, userId: user.id, name: nameOf(user), chatId, messageId: msg.message_id, text: text.slice(0, 500), at: dateNow() });
-    await saveGlobal(env, "savesNotices", notices);
-    await reply(env, chatId, "📝 " + tags.join(", ") + " notice recorded for " + displayUser(user) + ". An admin can review it; no warning or penalty was applied automatically.", msg.message_id);
-    if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "📌 STAR SAVES NOTICE\nMember: " + displayUser(user) + " (ID " + user.id + ")\nNotice: " + tags.join(", ") + "\nMessage: " + text.slice(0, 300) + "\nRecorded: " + dateNow());
-    return;
-  }
   // Saves-chat notices are sent to the admin warning desk for review; they do not issue automatic warnings.
   if (savesChat(env, chatId) && /#(?:WARNING|IMBACK)\b/i.test(text)) {
     const kind = /#WARNING\b/i.test(text) ? "WARNING" : "IMBACK";
@@ -713,9 +704,9 @@ async function handleUpdate(update, env) {
         "\nAction: admin review required. Use /warn USER_ID | reason to issue a formal warning; this tag alone does not issue one.");
     }
     if (kind === "WARNING") {
-      return reply(env, chatId, "⚠️ The #WARNING notice has been recorded for admin review. It does not automatically issue a formal warning. Please include the member's @username or reply to their message so admins can identify them.", msg.message_id);
+      return; // Keep the Saves chat silent; admins receive the notice in the warning desk.
     }
-    return reply(env, chatId, "💗 #IMBACK recorded. Welcome back! Open Posts in the private bot and complete your outstanding assigned links, including meaningful comments, likes, and saves. Admins have been notified.", msg.message_id);
+    return; // Keep the Saves chat silent; admins receive the notice in the warning desk.
   }
   // Saves chat is an evidence-only room: record Instagram links as evidence, never as engagement tasks.
   if (savesChat(env, chatId) && IG_RE.test(text)) {
@@ -727,8 +718,7 @@ async function handleUpdate(update, env) {
       evidence.push({ id: evidence.length ? Math.max(...evidence.map(e => e.id || 0)) + 1 : 1, userId: user.id, name: nameOf(user), chatId, type: "Instagram link", url: link, caption: text.slice(0,300), messageId: msg.message_id, at: dateNow(), status: "pending_review" });
     }
     await saveGlobal(env, "evidence", evidence);
-    await reply(env, chatId, "📸 Saved " + links.length + " Instagram link(s) for admin review. This records the submission; it does not prove likes or saves.", msg.message_id);
-    return;
+    return; // Evidence is stored silently; no public acknowledgement.
   }
   // Save-chat evidence mode: record incoming images/videos/documents without cluttering the chat with bot replies.
   if (savesChat(env, chatId) && (msg.photo || msg.video || msg.document || msg.animation || msg.video_note)) {
@@ -737,8 +727,7 @@ async function handleUpdate(update, env) {
     const type = msg.photo ? "screenshot/photo" : msg.video ? "screen recording/video" : msg.video_note ? "video note" : msg.animation ? "animation" : "document";
     evidence.push({ id: evidence.length ? Math.max(...evidence.map(e => e.id || 0)) + 1 : 1, userId: user.id, name: nameOf(user), chatId, type, fileId, caption: (msg.caption || "").slice(0,300), messageId: msg.message_id, at: dateNow(), status: "pending_review" });
     await saveGlobal(env, "evidence", evidence);
-    await reply(env, chatId, "📸 Evidence received (" + type + ") and saved for admin review.", msg.message_id);
-    return;
+    return; // Evidence is stored silently; no public acknowledgement.
   }
   if (text.startsWith("/tracked") || text.startsWith("/remove")) {
     if (!(await isAdmin(env, chatId, user.id, user.username))) return reply(env, chatId, "This command is available to group admins only.");
