@@ -415,7 +415,6 @@ async function handleUpdate(update, env) {
       const data = await load(env, env.LINK_CHAT_ID);
       const nowMs = Date.now();
       const ownOpen = data.tasks.filter(t => (!t.status || t.status === "approved" || t.status === "active") && (!t.deadline || Number.isFinite(new Date(t.deadline).getTime()) && new Date(t.deadline).getTime() > nowMs) && String(t.posterId) !== String(user.id) && !data.completions.some(c => c.taskId === t.id && String(c.userId) === String(user.id) && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed)).slice(-30).reverse();
-      const nowMs = Date.now();
       const timeLeft = (deadline) => {
         if (!deadline) return "time not set";
         const diff = new Date(deadline).getTime() - nowMs;
