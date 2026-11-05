@@ -12,14 +12,12 @@ export default {
         await sendEngagementReminders(env, now);
         const local = tbilisiParts(now);
         const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tbilisi", weekday: "short" }).format(now);
-        if (weekday === "Sun" && local.hour === 12 && env.SAVES_CHAT_ID) {
-          await reply(env, env.SAVES_CHAT_ID, "💗 SUNDAY SAVES REMINDER\n\nPlease share the Instagram links you engaged with and upload screenshots or screen recordings as evidence before the Saves window closes at Monday 00:00 Georgia time. This records evidence for admin review; it does not independently verify Instagram actions.");
-        }
+        // Intentionally no scheduled public-chat reminders: keep group chats quiet.
       })());
     } else if (cron === "0 20 * * SAT") {
       ctx.waitUntil((async () => {
         await setSavesChatOpen(env, true);
-        if (env.SAVES_CHAT_ID) await reply(env, env.SAVES_CHAT_ID, "💗 STAR SAVES IS OPEN\n\nSunday 00:00–Monday 00:00 Georgia time. Please share the Instagram links you engaged with and attach screenshots or screen recordings. Admins review submissions manually; evidence is not automatic proof of likes or saves.");
+        // Chat permissions change automatically, but the bot does not post an announcement.
       })());
     } else if (cron === "0 20 * * SUN") {
       ctx.waitUntil((async () => {
@@ -280,53 +278,16 @@ async function processExpiredTasks(env, now = new Date()) {
     );
     const report = "🧾 STAR LINKS — 24-HOUR CYCLE REVIEW\n\n" + lines.join("\n\n") +
       "\n\nExpired links have been removed from active Posts lists. Newer links remain active with their own deadlines. Missing reports create warnings; Instagram likes/saves are self-reported, not independently verified.";
+    // Never post cycle reports into the busy link group. Only send to a separately configured admin/warning chat.
     if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, report);
-    else await reply(env, env.LINK_CHAT_ID, report);
   }
 }
 
 async function sendEngagementReminders(env, now = new Date()) {
-  if (!env.LINK_CHAT_ID || !env.LCS_DATA) {
-    console.error("Engagement reminders skipped: configure LINK_CHAT_ID and LCS_DATA.");
-    return;
-  }
-  const data = await load(env, env.LINK_CHAT_ID);
-  const thresholds = [
-    { key: "1h", ms: 60 * 60 * 1000, min: 0, label: "⏰ Final 1-hour reminder" }
-  ];
-  const notices = [];
-  let changed = false;
-  for (const task of data.tasks || []) {
-    if (!["approved", "active", undefined].includes(task.status) || !task.deadline) continue;
-    const complete = (data.completions || []).some(c =>
-      c.taskId === task.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed
-    );
-    if (complete) continue;
-    const remaining = new Date(task.deadline).getTime() - now.getTime();
-    const threshold = thresholds.find(t => remaining <= t.ms && remaining > t.min && !(task.reminders || []).includes(t.key));
-    if (!threshold) continue;
-    task.reminders = [...(task.reminders || []), threshold.key];
-    changed = true;
-    notices.push({ task, threshold });
-  }
-  if (changed) await save(env, env.LINK_CHAT_ID, data);
-  if (!notices.length) return;
-  const chunks = [];
-  for (const {task, threshold} of notices) {
-    chunks.push(threshold.label + "\nTask #" + task.id + " · Posted by " + task.posterName + "\n" + task.url + "\nPlease open the private bot via /posts and finish the comment, like, and save reports. Deadline: " + formatGeorgian(task.deadline) + ".");
-  }
-  // Aggregate reminders into one message per hourly run to avoid flooding a busy 24/7 group.
-  const header = "💗 STAR LINKS ENGAGEMENT CHECK-IN\nPlease complete every assigned post within 24 hours. Use the Posts button to open your private task list. Your comment report and like/save confirmation are self-reported and may be reviewed by admins.\n\n";
-  const maxLen = 3500;
-  let message = header;
-  for (const item of chunks) {
-    if ((message + item + "\n\n").length > maxLen) {
-      await reply(env, env.LINK_CHAT_ID, message.trim());
-      message = "💗 STAR LINKS REMINDER (continued)\n\n";
-    }
-    message += item + "\n\n";
-  }
-  if (message.trim() !== header.trim()) await reply(env, env.LINK_CHAT_ID, message.trim());
+  // Deliberately disabled: reminders in the group were noisy. Members can use /posts
+  // in the private bot chat to see current tasks and deadlines.
+  // Expiry processing still runs on schedule and sends individual warnings privately.
+  return;
 }
 
 async function sendWeeklyEvidenceReport(env, scheduledTime = new Date()) {
@@ -908,23 +869,11 @@ async function handleUpdate(update, env) {
   const open = data.tasks.filter(t => t.posterId !== user.id && !data.completions.some(c => c.taskId === t.id && c.userId === user.id && c.comment && c.comment.trim() && c.likesConfirmed && c.saveConfirmed));
   const latestTask = data.tasks.find(t => t.id === Number(ids[0].slice(1)));
   const note = `🕵️ Your Instagram post has been received and queued for review.\n\n${canonicalLinks[0]}\nPosted by: ${displayUser(user)}\nTask ID: ${ids.join(", ")}\n\n⏳ Review estimate: 3–5 minutes. This is an estimate, not a guarantee; an admin may need to review it manually.\n\nIf approved, the bot will publish it in Star Links and notify you here. If it is rejected, the bot will send the reason privately. Until approval, it will not appear in members’ assigned Posts list.\n\nYou may submit another post after: ${formatGeorgian(latestTask.deadline)}\nThe bot validates the link format and records the submission; it cannot independently verify Instagram engagement or content availability.`;
-  const botUsername = await loadGlobal(env, "botUsername", "");
   // Keep the public Link Chat clean: review details are sent privately and to the admin desk.
   if (env.WARNING_CHAT_ID) await reply(env, env.WARNING_CHAT_ID, "🕵️ NEW POST AWAITING REVIEW\nMember: " + displayUser(user) + " (ID " + user.id + ")\nTask: " + ids.join(", ") + "\n" + canonicalLinks.join("\n") + "\nReview with /reviewposts, then /approve TASK_ID or /reject TASK_ID | reason.");
   const dm = await telegram(env, "sendMessage", { chat_id: user.id, text: note, disable_web_page_preview: true });
   if (!dm.ok) {
     console.error("Could not DM post sharer; they may need to start the bot first.", await dm.text());
   }
-  // One compact group acknowledgement with navigation buttons; keep public chatter low.
-  const compactRows = botUsername ? [
-    [{ text: "📋 Active posts & deadlines", url: "https://t.me/" + botUsername + "?start=posts" }],
-    [{ text: "📜 Rules", url: "https://t.me/" + botUsername + "?start=rules" }, { text: "💗 Menu", url: "https://t.me/" + botUsername }]
-  ] : [];
-  await telegram(env, "sendMessage", {
-    chat_id: chatId,
-    text: "💗 Link received for admin review. Once approved, it will appear in the active 24-hour list. Use the buttons for posts and rules.",
-    reply_to_message_id: msg.message_id,
-    disable_web_page_preview: true,
-    ...(compactRows.length ? { reply_markup: { inline_keyboard: compactRows } } : {})
-  });
+  // No public acknowledgement: keep the group quiet. The submitter receives details privately.
 }
